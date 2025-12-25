@@ -1,0 +1,76 @@
+{
+  "project_info": {
+    "project_number": "588562798442",
+    "project_id": "brick-rush-7226e",
+    "storage_bucket": "brick-rush-7226e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:588562798442:android:503ab3217279b42a927713",
+        "android_client_info": {
+          "package_name": "com.donghwa.gameVerse"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "588562798442-q2f8fsied1mdastv9rrjerahslnqohu6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBACWb_gIlzpPMEV9VLFHQuZTEs8tFs9YE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "588562798442-q2f8fsied1mdastv9rrjerahslnqohu6.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:588562798442:android:f666c3b4e8d1d858927713",
+        "android_client_info": {
+          "package_name": "com.myname.brickrush"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "588562798442-gcjldmb63dbd0aj167t6l8fvc2l69b67.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.myname.brickrush",
+            "certificate_hash": "a9fb2a3eb02ead8f22b4be7b38edd34583545d6e"
+          }
+        },
+        {
+          "client_id": "588562798442-q2f8fsied1mdastv9rrjerahslnqohu6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBACWb_gIlzpPMEV9VLFHQuZTEs8tFs9YE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "588562798442-q2f8fsied1mdastv9rrjerahslnqohu6.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
