@@ -1,4 +1,4 @@
-package com.donghwa.gameVerse // 패키지명 확인
+package com.donghwa.gameVerse
 
 import android.app.Activity
 import android.content.Intent
@@ -22,6 +22,7 @@ import com.google.firebase.auth.GoogleAuthProvider
 import com.donghwa.gameVerse.brickgame.GameView
 import com.donghwa.gameVerse.runnergame.RunnerGameView
 import com.donghwa.gameVerse.managers.RankingManager
+import com.donghwa.gameVerse.simulation.CraneSimulationView // [추가] 시뮬레이션 뷰 임포트
 
 class MainActivity : Activity() {
 
@@ -34,6 +35,7 @@ class MainActivity : Activity() {
 
     private var brickGameView: GameView? = null
     private var runnerGameView: RunnerGameView? = null
+    private var simulationView: CraneSimulationView? = null // [추가] 시뮬레이션 뷰 변수
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,17 +83,17 @@ class MainActivity : Activity() {
         val uid = user?.uid
 
         if (uid != null) {
-            // [수정] 4개의 파라미터를 받아와서 HomeView에 전달
             rankingManager.loadHomeData(uid) { highScore, runnerHighScore, leaderboard, runnerLeaderboard ->
                 val homeView = HomeView(
                     this,
                     userName,
                     highScore,
-                    runnerHighScore, // [신규]
+                    runnerHighScore,
                     leaderboard,
-                    runnerLeaderboard, // [신규]
+                    runnerLeaderboard,
                     onStartBrickGame = { startBrickGame() },
                     onStartRunnerGame = { startRunnerGame() },
+                    onStartSimulation = { startSimulation() }, // [연결] 시뮬레이션 시작 함수 연결
                     onLogout = { signOut() }
                 )
                 setContentView(homeView)
@@ -100,10 +102,6 @@ class MainActivity : Activity() {
             showLoginScreen()
         }
     }
-
-    // ... (showLoginScreen, signIn, onActivityResult, firebaseAuthWithGoogle 등은 기존과 동일) ...
-    // 아래 코드는 위 MainActivity.kt 전체 코드에서 해당 부분만 붙여넣거나, 전체를 복사해서 쓰세요.
-    // (분량 관계상 showHomeScreen 부분만 강조했습니다. 나머지 함수는 그대로 두시면 됩니다.)
 
     private fun showLoginScreen() {
         val layout = LinearLayout(this)
@@ -203,6 +201,19 @@ class MainActivity : Activity() {
         runnerGameView?.resume()
     }
 
+    // [추가] 시뮬레이션 시작
+    private fun startSimulation() {
+        simulationView = CraneSimulationView(this) {
+            // 종료 콜백
+            runOnUiThread {
+                simulationView = null
+                showHomeScreen()
+            }
+        }
+        setContentView(simulationView)
+        Toast.makeText(this, "화면 위/아래를 터치하여 붐을 움직여보세요!", Toast.LENGTH_SHORT).show()
+    }
+
     private fun saveHighScore(score: Int) {
         val user = auth.currentUser
         val uid = user?.uid ?: return
@@ -231,6 +242,7 @@ class MainActivity : Activity() {
             brickGameView = null
             runnerGameView?.pause()
             runnerGameView = null
+            simulationView = null
             showLoginScreen()
         }
     }
@@ -243,6 +255,10 @@ class MainActivity : Activity() {
         } else if (runnerGameView != null && runnerGameView!!.isShown) {
             runnerGameView?.pause()
             runnerGameView = null
+            showHomeScreen()
+        } else if (simulationView != null && simulationView!!.isShown) {
+            // [추가] 시뮬레이션 중 뒤로가기 처리
+            simulationView = null
             showHomeScreen()
         } else {
             super.onBackPressed()

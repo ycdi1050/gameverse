@@ -21,6 +21,7 @@ class HomeView(
     private val runnerLeaderboard: List<String>, // 러닝 랭킹
     private val onStartBrickGame: () -> Unit,
     private val onStartRunnerGame: () -> Unit,
+    private val onStartSimulation: () -> Unit,   // [추가] 시뮬레이션 실행 콜백
     private val onLogout: () -> Unit
 ) : FrameLayout(context) {
 
@@ -54,6 +55,7 @@ class HomeView(
         title.setPadding(0, 0, 0, 40)
         centerLayout.addView(title)
 
+        // 기존 벽돌깨기 버튼
         val startBrickBtn = Button(context)
         startBrickBtn.text = "🧱 벽돌 깨기 시작"
         startBrickBtn.textSize = 20f
@@ -65,6 +67,7 @@ class HomeView(
         startBrickBtn.setOnClickListener { onStartBrickGame() }
         centerLayout.addView(startBrickBtn)
 
+        // 기존 러닝게임 버튼
         val startRunnerBtn = Button(context)
         startRunnerBtn.text = "🏃 무한 러닝 시작"
         startRunnerBtn.textSize = 20f
@@ -73,6 +76,19 @@ class HomeView(
         startRunnerBtn.layoutParams = btnParams
         startRunnerBtn.setOnClickListener { onStartRunnerGame() }
         centerLayout.addView(startRunnerBtn)
+
+        // [추가] 크레인 시뮬레이션 버튼
+        val startSimBtn = Button(context)
+        startSimBtn.text = "🏗️ 크레인 시뮬레이션"
+        startSimBtn.textSize = 20f
+        startSimBtn.setBackgroundColor(Color.parseColor("#FF9800")) // 건설 장비 느낌 (주황)
+        startSimBtn.setTextColor(Color.WHITE)
+        // 변수명 충돌 방지: simBtnParams 사용
+        val simBtnParams = LinearLayout.LayoutParams(600, 140)
+        simBtnParams.setMargins(0, 20, 0, 20)
+        startSimBtn.layoutParams = simBtnParams
+        startSimBtn.setOnClickListener { onStartSimulation() }
+        centerLayout.addView(startSimBtn)
 
         addView(centerLayout)
 
@@ -121,7 +137,6 @@ class HomeView(
         // --- 랭킹 컨테이너 (가로로 배치하여 공간 절약) ---
         val rankContainer = LinearLayout(context)
         rankContainer.orientation = LinearLayout.HORIZONTAL
-        // [수정] Gravity.CENTER_TOP 오류 해결 -> CENTER_HORIZONTAL or TOP 사용
         rankContainer.gravity = Gravity.CENTER_HORIZONTAL or Gravity.TOP
         rankContainer.layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
