@@ -5,7 +5,6 @@ import android.app.Activity
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
-import android.text.InputFilter
 import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
@@ -22,7 +21,7 @@ import com.google.android.gms.common.api.ApiException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 
-import com.donghwa.gameVerse.brickgame.GameView
+import com.donghwa.gameVerse.brickgame.BrickGameView
 import com.donghwa.gameVerse.runnergame.RunnerGameView
 import com.donghwa.gameVerse.simulation.CraneSimulationView
 import com.donghwa.gameVerse.defensegame.DefenseGameView // 패키지 확인
@@ -36,7 +35,7 @@ class MainActivity : Activity() {
     private val RC_SIGN_IN = 9001
     private val WEB_CLIENT_ID = "588562798442-q2f8fsied1mdastv9rrjerahslnqohu6.apps.googleusercontent.com"
 
-    private var brickGameView: GameView? = null
+    private var brickGameView: BrickGameView? = null
     private var runnerGameView: RunnerGameView? = null
     private var simulationView: CraneSimulationView? = null
     private var defenseGameView: DefenseGameView? = null

@@ -10,7 +10,7 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import com.donghwa.gameVerse.ItemManager
 
-class GameView(
+class BrickGameView(
     context: Context,
     private val onExit: () -> Unit,
     private val onGameOver: (Int) -> Unit
