@@ -65,27 +65,7 @@ class HomeView(
         val btnParams = LinearLayout.LayoutParams(600, 130)
         btnParams.setMargins(0, 15, 0, 15)
 
-        // 벽돌깨기 버튼
-        val startBrickBtn = Button(context)
-        startBrickBtn.text = "🧱 벽돌 깨기 시작"
-        startBrickBtn.textSize = 18f
-        startBrickBtn.setBackgroundColor(Color.parseColor("#FF4081"))
-        startBrickBtn.setTextColor(Color.WHITE)
-        startBrickBtn.layoutParams = btnParams
-        startBrickBtn.setOnClickListener { onStartBrickGame() }
-        centerLayout.addView(startBrickBtn)
-
-        // 러닝게임 버튼
-        val startRunnerBtn = Button(context)
-        startRunnerBtn.text = "🏃 무한 러닝 시작"
-        startRunnerBtn.textSize = 18f
-        startRunnerBtn.setBackgroundColor(Color.parseColor("#00E5FF"))
-        startRunnerBtn.setTextColor(Color.BLACK)
-        startRunnerBtn.layoutParams = btnParams
-        startRunnerBtn.setOnClickListener { onStartRunnerGame() }
-        centerLayout.addView(startRunnerBtn)
-
-        // 디펜스 게임 버튼
+        // [변경] 디펜스 게임 버튼 (메인 게임으로 배치)
         val startDefenseBtn = Button(context)
         startDefenseBtn.text = "🛡️ 디펜스 게임 시작"
         startDefenseBtn.textSize = 18f
@@ -95,15 +75,15 @@ class HomeView(
         startDefenseBtn.setOnClickListener { onStartDefenseGame() }
         centerLayout.addView(startDefenseBtn)
 
-        // 크레인 시뮬레이션 버튼
-        val startSimBtn = Button(context)
-        startSimBtn.text = "🏗️ 크레인 시뮬레이션"
-        startSimBtn.textSize = 18f
-        startSimBtn.setBackgroundColor(Color.parseColor("#FF9800"))
-        startSimBtn.setTextColor(Color.WHITE)
-        startSimBtn.layoutParams = btnParams
-        startSimBtn.setOnClickListener { onStartSimulation() }
-        centerLayout.addView(startSimBtn)
+        // [신규] 미니게임 모음 버튼 (팝업 호출)
+        val miniGameBtn = Button(context)
+        miniGameBtn.text = "🕹️ 미니게임 모음"
+        miniGameBtn.textSize = 18f
+        miniGameBtn.setBackgroundColor(Color.parseColor("#9C27B0")) // 보라색
+        miniGameBtn.setTextColor(Color.WHITE)
+        miniGameBtn.layoutParams = btnParams
+        miniGameBtn.setOnClickListener { showMiniGamePopup() }
+        centerLayout.addView(miniGameBtn)
 
         addView(centerLayout)
 
@@ -181,7 +161,7 @@ class HomeView(
 
         infoLayout.addView(scoreLayout)
 
-        // --- 랭킹 컨테이너 (3열로 수정) ---
+        // --- 랭킹 컨테이너 (3열) ---
         val rankContainer = LinearLayout(context)
         rankContainer.orientation = LinearLayout.HORIZONTAL
         rankContainer.gravity = Gravity.CENTER_HORIZONTAL or Gravity.TOP
@@ -196,7 +176,6 @@ class HomeView(
         val centerRank = createRankView("🏃 러닝 랭킹", runnerLeaderboard, Color.GREEN)
         centerRank.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
 
-        // 디펜스 랭킹
         val rightRank = createRankView("🛡️ 디펜스 랭킹", defenseLeaderboard, Color.parseColor("#76FF03"))
         rightRank.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
 
@@ -228,6 +207,68 @@ class HomeView(
         }
 
         addView(settingsBtn)
+    }
+
+    // [신규] 미니게임 팝업 표시 함수
+    private fun showMiniGamePopup() {
+        val layout = LinearLayout(context)
+        layout.orientation = LinearLayout.VERTICAL
+        layout.gravity = Gravity.CENTER
+        layout.setPadding(50, 50, 50, 50)
+        // 팝업 배경색 (어두운 회색)
+        layout.setBackgroundColor(Color.parseColor("#212121"))
+
+        val btnParams = LinearLayout.LayoutParams(500, 130)
+        btnParams.setMargins(0, 20, 0, 20)
+
+        // 1. 벽돌깨기 버튼
+        val startBrickBtn = Button(context)
+        startBrickBtn.text = "🧱 벽돌 깨기 시작"
+        startBrickBtn.textSize = 16f
+        startBrickBtn.setBackgroundColor(Color.parseColor("#FF4081"))
+        startBrickBtn.setTextColor(Color.WHITE)
+        startBrickBtn.layoutParams = btnParams
+        layout.addView(startBrickBtn)
+
+        // 2. 러닝게임 버튼
+        val startRunnerBtn = Button(context)
+        startRunnerBtn.text = "🏃 무한 러닝 시작"
+        startRunnerBtn.textSize = 16f
+        startRunnerBtn.setBackgroundColor(Color.parseColor("#00E5FF"))
+        startRunnerBtn.setTextColor(Color.BLACK)
+        startRunnerBtn.layoutParams = btnParams
+        layout.addView(startRunnerBtn)
+
+        // 3. 크레인 시뮬레이션 버튼
+        val startSimBtn = Button(context)
+        startSimBtn.text = "🏗️ 크레인 시뮬레이션"
+        startSimBtn.textSize = 16f
+        startSimBtn.setBackgroundColor(Color.parseColor("#FF9800"))
+        startSimBtn.setTextColor(Color.WHITE)
+        startSimBtn.layoutParams = btnParams
+        layout.addView(startSimBtn)
+
+        val dialog = AlertDialog.Builder(context)
+            .setTitle("미니게임 선택")
+            .setView(layout)
+            .setNegativeButton("닫기", null)
+            .create()
+
+        // 클릭 이벤트 설정 (다이얼로그 닫기 + 게임 시작)
+        startBrickBtn.setOnClickListener {
+            dialog.dismiss()
+            onStartBrickGame()
+        }
+        startRunnerBtn.setOnClickListener {
+            dialog.dismiss()
+            onStartRunnerGame()
+        }
+        startSimBtn.setOnClickListener {
+            dialog.dismiss()
+            onStartSimulation()
+        }
+
+        dialog.show()
     }
 
     private fun createRankView(title: String, list: List<String>, color: Int): LinearLayout {

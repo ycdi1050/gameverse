@@ -1,4 +1,3 @@
-// ... imports ...
 package com.donghwa.gameVerse
 
 import android.app.Activity
@@ -21,10 +20,11 @@ import com.google.android.gms.common.api.ApiException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 
+// 각 게임 뷰 import 확인
 import com.donghwa.gameVerse.brickgame.BrickGameView
 import com.donghwa.gameVerse.runnergame.RunnerGameView
 import com.donghwa.gameVerse.simulation.CraneSimulationView
-import com.donghwa.gameVerse.defensegame.DefenseGameView // 패키지 확인
+import com.donghwa.gameVerse.defensegame.DefenseGameView
 
 class MainActivity : Activity() {
 
@@ -35,12 +35,12 @@ class MainActivity : Activity() {
     private val RC_SIGN_IN = 9001
     private val WEB_CLIENT_ID = "588562798442-q2f8fsied1mdastv9rrjerahslnqohu6.apps.googleusercontent.com"
 
+    // 각 게임 뷰 변수
     private var brickGameView: BrickGameView? = null
     private var runnerGameView: RunnerGameView? = null
     private var simulationView: CraneSimulationView? = null
     private var defenseGameView: DefenseGameView? = null
 
-    // [신규] 디펜스 게임 최대 스테이지 저장 변수
     private var myDefenseMaxStage = 1
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -87,10 +87,9 @@ class MainActivity : Activity() {
         val user = auth.currentUser
         val uid = user?.uid ?: return
 
-        // [수정] 8번째 인자로 defenseMaxStage 수신
         rankingManager.loadHomeData(uid) { highScore, runnerHighScore, defenseHighScore, defenseMaxStage, leaderboard, runnerLeaderboard, defenseLeaderboard, level, currentXp, nickname ->
 
-            this.myDefenseMaxStage = defenseMaxStage // 저장해둠
+            this.myDefenseMaxStage = defenseMaxStage
 
             if (nickname.isNullOrEmpty()) {
                 showNicknameSetupScreen(uid)
@@ -109,7 +108,7 @@ class MainActivity : Activity() {
                     onStartBrickGame = { startBrickGame() },
                     onStartRunnerGame = { startRunnerGame() },
                     onStartSimulation = { startSimulation() },
-                    onStartDefenseGame = { startDefenseGame() }, // 호출
+                    onStartDefenseGame = { startDefenseGame() },
                     onLogout = { signOut() }
                 )
                 setContentView(homeView)
@@ -117,12 +116,147 @@ class MainActivity : Activity() {
         }
     }
 
-    // ... (중략: showNicknameSetupScreen, showLoginScreen, signIn, onActivityResult 등 기존 코드 유지) ...
-    // ... 중복을 줄이기 위해 생략합니다. 기존 코드를 그대로 두시면 됩니다 ...
-    // 아래는 showNicknameSetupScreen 등 기존 함수들...
+    // --- [중요 수정] 누락된 게임 시작 함수 구현 ---
+
+    private fun startBrickGame() {
+        brickGameView = BrickGameView(this,
+            onExit = {
+                runOnUiThread {
+                    brickGameView?.pause()
+                    brickGameView = null
+                    showHomeScreen()
+                }
+            },
+            onGameOver = { score ->
+                saveHighScore(score)
+            }
+        )
+        setContentView(brickGameView)
+        brickGameView?.resume()
+    }
+
+    private fun startRunnerGame() {
+        runnerGameView = RunnerGameView(this,
+            onExit = {
+                runOnUiThread {
+                    runnerGameView?.pause()
+                    runnerGameView = null
+                    showHomeScreen()
+                }
+            },
+            onGameOver = { score ->
+                saveRunnerHighScore(score)
+            }
+        )
+        setContentView(runnerGameView)
+        runnerGameView?.resume()
+    }
+
+    private fun startSimulation() {
+        simulationView = CraneSimulationView(this) {
+            runOnUiThread {
+                simulationView = null
+                showHomeScreen()
+            }
+        }
+        setContentView(simulationView)
+    }
+
+    private fun startDefenseGame() {
+        defenseGameView = DefenseGameView(
+            this,
+            maxUnlockedStage = myDefenseMaxStage,
+            onExit = {
+                runOnUiThread {
+                    defenseGameView?.pause()
+                    defenseGameView = null
+                    showHomeScreen()
+                }
+            },
+            onGameOver = { score, clearedStage ->
+                saveDefenseHighScore(score, clearedStage)
+            }
+        )
+        setContentView(defenseGameView)
+        defenseGameView?.resume()
+    }
+
+    // --- [중요 수정] 누락된 점수 저장 및 로그아웃 구현 ---
+
+    private fun saveHighScore(score: Int) {
+        val user = auth.currentUser ?: return
+        // RankingManager에 updateHighScore 메서드가 있다고 가정 (없으면 RankingManager도 확인 필요)
+        rankingManager.updateHighScore(user.uid, user.displayName ?: "Player", score) {
+            Toast.makeText(this, "벽돌 깨기 점수 저장 완료!", Toast.LENGTH_SHORT).show()
+        }
+        rankingManager.addExperience(user.uid, score) { level, up ->
+            if (up) Toast.makeText(this, "레벨업! Lv.$level", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun saveRunnerHighScore(score: Int) {
+        val user = auth.currentUser ?: return
+        // RankingManager에 updateRunnerHighScore 메서드가 있다고 가정
+        rankingManager.updateRunnerHighScore(user.uid, user.displayName ?: "Player", score) {
+            Toast.makeText(this, "러닝 게임 점수 저장 완료!", Toast.LENGTH_SHORT).show()
+        }
+        rankingManager.addExperience(user.uid, score) { level, up ->
+            if (up) Toast.makeText(this, "레벨업! Lv.$level", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun saveDefenseHighScore(score: Int, clearedStage: Int) {
+        val user = auth.currentUser ?: return
+        rankingManager.updateDefenseHighScore(user.uid, user.displayName ?: "Player", score) {
+            Toast.makeText(this, "디펜스 점수 저장 완료!", Toast.LENGTH_SHORT).show()
+        }
+        if (clearedStage > 0) {
+            rankingManager.updateDefenseMaxStage(user.uid, clearedStage)
+            if (clearedStage + 1 > myDefenseMaxStage) {
+                myDefenseMaxStage = clearedStage + 1
+            }
+        }
+        rankingManager.addExperience(user.uid, score) { level, up ->
+            if (up) Toast.makeText(this, "레벨업! Lv.$level", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun signOut() {
+        auth.signOut()
+        googleSignInClient.signOut().addOnCompleteListener(this) {
+            showLoginScreen()
+        }
+    }
+
+    // --- [중요 수정] 뒤로 가기 처리 (모든 게임에 적용) ---
+    override fun onBackPressed() {
+        when {
+            brickGameView != null -> {
+                brickGameView?.pause()
+                brickGameView = null
+                showHomeScreen()
+            }
+            runnerGameView != null -> {
+                runnerGameView?.pause()
+                runnerGameView = null
+                showHomeScreen()
+            }
+            simulationView != null -> {
+                simulationView = null
+                showHomeScreen()
+            }
+            defenseGameView != null -> {
+                defenseGameView?.pause()
+                defenseGameView = null
+                showHomeScreen()
+            }
+            else -> super.onBackPressed()
+        }
+    }
+
+    // --- 기존 로그인/닉네임 설정 UI 함수들 ---
 
     private fun showNicknameSetupScreen(uid: String) {
-        // ... (기존과 동일)
         val layout = LinearLayout(this)
         layout.orientation = LinearLayout.VERTICAL
         layout.gravity = Gravity.CENTER
@@ -156,10 +290,11 @@ class MainActivity : Activity() {
     }
 
     private fun showLoginScreen() {
-        // ... (기존과 동일)
         val layout = LinearLayout(this)
         layout.orientation = LinearLayout.VERTICAL
         layout.gravity = Gravity.CENTER
+        layout.setBackgroundColor(Color.parseColor("#121212")) // 배경색 추가 권장
+
         val btn = Button(this)
         btn.text = "Google Login"
         btn.setOnClickListener { val signInIntent = googleSignInClient.signInIntent; startActivityForResult(signInIntent, RC_SIGN_IN) }
@@ -167,7 +302,6 @@ class MainActivity : Activity() {
         setContentView(layout)
     }
 
-    private fun signIn() { /*...*/ } // 기존 코드 유지
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == RC_SIGN_IN) {
@@ -182,70 +316,17 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun startBrickGame() { /*...*/ }
-    private fun startRunnerGame() { /*...*/ }
-    private fun startSimulation() { /*...*/ }
-    private fun saveHighScore(score: Int) { /*...*/ }
-    private fun saveRunnerHighScore(score: Int) { /*...*/ }
-    private fun signOut() { /*...*/ }
+    override fun onPause() {
+        super.onPause()
+        brickGameView?.pause()
+        runnerGameView?.pause()
+        defenseGameView?.pause()
+    }
 
-    // [수정] 디펜스 게임 시작 시 maxUnlockedStage 전달
-    private fun startDefenseGame() {
-        defenseGameView = DefenseGameView(
-            this,
-            maxUnlockedStage = myDefenseMaxStage, // 전달
-            onExit = {
-                runOnUiThread {
-                    defenseGameView?.pause()
-                    defenseGameView = null
-                    showHomeScreen()
-                }
-            },
-            onGameOver = { score, clearedStage -> // 클리어한 스테이지 정보도 받음
-                saveDefenseHighScore(score, clearedStage)
-            }
-        )
-        setContentView(defenseGameView)
+    override fun onResume() {
+        super.onResume()
+        brickGameView?.resume()
+        runnerGameView?.resume()
         defenseGameView?.resume()
     }
-
-    // [수정] 점수 및 스테이지 정보 저장
-    private fun saveDefenseHighScore(score: Int, clearedStage: Int) {
-        val user = auth.currentUser ?: return
-        val uid = user.uid
-        val name = user.displayName ?: "Player"
-
-        // 1. 점수 저장
-        rankingManager.updateDefenseHighScore(uid, name, score) {
-            Toast.makeText(this, "디펜스 점수 저장 완료!", Toast.LENGTH_SHORT).show()
-        }
-
-        // 2. 최대 스테이지 갱신 (클리어 시)
-        if (clearedStage > 0) {
-            rankingManager.updateDefenseMaxStage(uid, clearedStage)
-            // 로컬 변수도 갱신
-            if (clearedStage + 1 > myDefenseMaxStage) {
-                myDefenseMaxStage = clearedStage + 1
-            }
-        }
-
-        // 3. 경험치
-        rankingManager.addExperience(uid, score) { level, up ->
-            if (up) Toast.makeText(this, "레벨업! Lv.$level", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    // 뒤로가기 처리 등 나머지 함수 유지
-    override fun onBackPressed() {
-        if (defenseGameView != null) {
-            defenseGameView?.pause()
-            defenseGameView = null
-            showHomeScreen()
-        } else {
-            super.onBackPressed()
-        }
-    }
-
-    override fun onPause() { super.onPause(); defenseGameView?.pause() }
-    override fun onResume() { super.onResume(); defenseGameView?.resume() }
 }
