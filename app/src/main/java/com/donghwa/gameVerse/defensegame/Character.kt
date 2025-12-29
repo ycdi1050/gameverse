@@ -10,13 +10,18 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-// WeaponType enum 정의 유지
 enum class WeaponType {
     SMG, SHOTGUN, SNIPER, MISSILE, BOW
 }
 
-class Character(var x: Float, var y: Float, var weaponType: WeaponType) : GameObject {
-    private var angle = -Math.PI / 2 // 라디안 각도
+// [수정] characterType 필드 추가
+class Character(
+    var x: Float,
+    var y: Float,
+    var weaponType: WeaponType,
+    var characterType: DefenseCharacterType
+) : GameObject {
+    private var angle = -Math.PI / 2
     var damage = 10
     var range = 300f
     private var fireRate = 1000L
@@ -24,11 +29,9 @@ class Character(var x: Float, var y: Float, var weaponType: WeaponType) : GameOb
     var level = 1
 
     private val minMissileRange = 200f
-
-    // 공격 애니메이션 관련
-    private var recoilOffset = 0f // 반동 거리
-    private val maxRecoil = 15f   // 최대 반동
-    private val recoilRecovery = 2f // 복구 속도
+    private var recoilOffset = 0f
+    private val maxRecoil = 15f
+    private val recoilRecovery = 2f
 
     init {
         updateStats()
@@ -46,6 +49,8 @@ class Character(var x: Float, var y: Float, var weaponType: WeaponType) : GameOb
 
     private fun updateStats() {
         val bonus = level - 1
+
+        // 1. 무기 기본 스탯
         when (weaponType) {
             WeaponType.SMG -> {
                 damage = 3 + (bonus * 2)
@@ -73,10 +78,24 @@ class Character(var x: Float, var y: Float, var weaponType: WeaponType) : GameOb
                 fireRate = 800L
             }
         }
+
+        // 2. 캐릭터 타입 보너스 적용
+        when (characterType) {
+            DefenseCharacterType.HUMAN -> {
+                // 밸런스형: 특별한 보너스 없음 (또는 비용 할인 로직 등 외부에서 처리)
+            }
+            DefenseCharacterType.ROBOT -> {
+                // 공격 속도 10% 증가 (딜레이 감소)
+                fireRate = (fireRate * 0.9).toLong()
+            }
+            DefenseCharacterType.ALIEN -> {
+                // 사거리 10% 증가
+                range *= 1.1f
+            }
+        }
     }
 
     fun autoAttack(enemies: List<Enemy>, currentTime: Long, globalDamageMultiplier: Float = 1.0f): Projectile? {
-        // 반동 회복
         if (recoilOffset > 0) {
             recoilOffset -= recoilRecovery
             if (recoilOffset < 0) recoilOffset = 0f
@@ -93,8 +112,6 @@ class Character(var x: Float, var y: Float, var weaponType: WeaponType) : GameOb
         return if (target != null) {
             angle = atan2((target.y - y).toDouble(), (target.x - x).toDouble())
             lastShotTime = currentTime
-
-            // 발사 시 반동 적용
             recoilOffset = maxRecoil
 
             val color = when (weaponType) {
@@ -106,8 +123,6 @@ class Character(var x: Float, var y: Float, var weaponType: WeaponType) : GameOb
             }
 
             val finalDamage = (damage * globalDamageMultiplier).toInt()
-
-            // 총구 위치 보정 (반동 적용된 위치에서 발사되는 것처럼 보이게 할 수도 있음)
             Projectile(x, y, x, y, target, finalDamage, color, weaponType)
         } else {
             null
@@ -117,28 +132,11 @@ class Character(var x: Float, var y: Float, var weaponType: WeaponType) : GameOb
     override fun update() {}
 
     override fun draw(canvas: Canvas, paint: Paint) {
-        val bitmap = ResourceManager.getCharacterBitmap(weaponType)
+        // [수정] 캐릭터 타입에 따라 몸체 그리기
+        drawBody(canvas, paint)
 
-        if (bitmap != null) {
-            // 이미지 회전 및 그리기
-            val matrix = Matrix()
-            // 비트맵 중심을 기준으로 회전 (angle은 라디안이므로 도(degree)로 변환)
-            // 기본 이미지가 오른쪽(0도)을 보고 있다고 가정
-            val degrees = Math.toDegrees(angle).toFloat()
-
-            // 반동 효과: 현재 각도의 반대 방향으로 살짝 이동
-            val recoilX = -(cos(angle).toFloat() * recoilOffset)
-            val recoilY = -(sin(angle).toFloat() * recoilOffset)
-
-            matrix.postTranslate(-bitmap.width / 2f, -bitmap.height / 2f) // 중심점 이동
-            matrix.postRotate(degrees) // 회전
-            matrix.postTranslate(x + recoilX, y + recoilY) // 원래 위치 + 반동 적용
-
-            canvas.drawBitmap(bitmap, matrix, paint)
-        } else {
-            // 비트맵 로드 실패 시 기존 도형 그리기 (Fallback)
-            drawFallbackShape(canvas, paint)
-        }
+        // [수정] 무기 그리기 (기존 로직 + 이미지 없으면 도형)
+        drawWeapon(canvas, paint)
 
         // 레벨 텍스트
         paint.color = Color.WHITE
@@ -147,11 +145,51 @@ class Character(var x: Float, var y: Float, var weaponType: WeaponType) : GameOb
         canvas.drawText("Lv.$level", x, y + 60f, paint)
     }
 
-    private fun drawFallbackShape(canvas: Canvas, paint: Paint) {
+    private fun drawBody(canvas: Canvas, paint: Paint) {
+        // 이미지가 있다면 ResourceManager에서 가져오겠지만, 여기선 도형으로 구분
         paint.style = Paint.Style.FILL
-        paint.color = Color.GRAY
-        canvas.drawCircle(x, y, 30f, paint)
-        canvas.drawLine(x, y, x + cos(angle).toFloat() * 50, y + sin(angle).toFloat() * 50, paint)
+        paint.color = when (characterType) {
+            DefenseCharacterType.HUMAN -> Color.parseColor("#FFCC80") // 살구색
+            DefenseCharacterType.ROBOT -> Color.parseColor("#B0BEC5") // 회색
+            DefenseCharacterType.ALIEN -> Color.parseColor("#A5D6A7") // 연두색
+        }
+        canvas.drawCircle(x, y, 35f, paint) // 몸통
+
+        // 테두리
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 3f
+        paint.color = Color.BLACK
+        canvas.drawCircle(x, y, 35f, paint)
+    }
+
+    private fun drawWeapon(canvas: Canvas, paint: Paint) {
+        val bitmap = ResourceManager.getCharacterBitmap(weaponType)
+        val degrees = Math.toDegrees(angle).toFloat()
+        val recoilX = -(cos(angle).toFloat() * recoilOffset)
+        val recoilY = -(sin(angle).toFloat() * recoilOffset)
+
+        if (bitmap != null) {
+            val matrix = Matrix()
+            matrix.postTranslate(-bitmap.width / 2f, -bitmap.height / 2f)
+            matrix.postRotate(degrees)
+            matrix.postTranslate(x + recoilX, y + recoilY)
+            canvas.drawBitmap(bitmap, matrix, paint)
+        } else {
+            // 무기 이미지가 없을 때 Fallback 도형
+            paint.style = Paint.Style.FILL
+            paint.color = Color.DKGRAY
+            // 회전된 무기(막대기) 그리기
+            canvas.save()
+            canvas.translate(x + recoilX, y + recoilY)
+            canvas.rotate(degrees)
+
+            // 무기 모양
+            val wLen = 50f
+            val wWidth = if(weaponType == WeaponType.MISSILE) 15f else 8f
+            canvas.drawRect(0f, -wWidth/2, wLen, wWidth/2, paint)
+
+            canvas.restore()
+        }
     }
 
     private fun dist(x1: Float, y1: Float, x2: Float, y2: Float): Float {

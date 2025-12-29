@@ -20,7 +20,9 @@ class DefenseGameState {
     var globalDamageMultiplier = 1.0f
     var upgradeCost = 100
 
+    // [신규] 선택된 캐릭터 및 무기
     var selectedWeapon: WeaponType = WeaponType.SMG
+    var selectedCharacterType: DefenseCharacterType = DefenseCharacterType.HUMAN
 
     var killsInCurrentStage = 0
     var requiredKills = 10
@@ -34,7 +36,7 @@ class DefenseGameState {
     var dragStartPos: PointF? = null
 
     var path = ArrayList<PointF>()
-    val gridSize = 400f // 격자 크기 변경 (400px)
+    val gridSize = 400f
     var rows = 0
     var cols = 0
     lateinit var gridState: Array<BooleanArray>

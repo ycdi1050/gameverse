@@ -198,7 +198,10 @@ class DefenseGameLogic(private val state: DefenseGameState) {
                         val targetChar = state.characters.find { it != char && Math.abs(it.x - centerX) < 10 && Math.abs(it.y - centerY) < 10 }
 
                         if (targetChar != null) {
-                            if (targetChar.level == char.level && targetChar.weaponType == char.weaponType) {
+                            // [수정] 합칠 때 캐릭터 타입도 같은지 확인
+                            if (targetChar.level == char.level &&
+                                targetChar.weaponType == char.weaponType &&
+                                targetChar.characterType == char.characterType) {
                                 targetChar.upgrade()
                                 state.characters.remove(char)
                                 state.selectedTile = null
@@ -224,7 +227,8 @@ class DefenseGameLogic(private val state: DefenseGameState) {
                         if (existing == null) {
                             val buildCost = 50
                             if (state.currentPoints >= buildCost) {
-                                state.characters.add(Character(centerX, centerY, state.selectedWeapon))
+                                // [수정] 캐릭터 생성 시 선택된 캐릭터 타입(스킨)과 무기 적용
+                                state.characters.add(Character(centerX, centerY, state.selectedWeapon, state.selectedCharacterType))
                                 state.currentPoints -= buildCost
                                 state.selectedTile = PointF(x, y)
                                 return true

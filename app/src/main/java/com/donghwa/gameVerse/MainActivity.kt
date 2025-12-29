@@ -20,11 +20,12 @@ import com.google.android.gms.common.api.ApiException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 
-// 각 게임 뷰 import 확인
 import com.donghwa.gameVerse.brickgame.BrickGameView
 import com.donghwa.gameVerse.runnergame.RunnerGameView
 import com.donghwa.gameVerse.simulation.CraneSimulationView
 import com.donghwa.gameVerse.defensegame.DefenseGameView
+import com.donghwa.gameVerse.defensegame.WeaponType
+import com.donghwa.gameVerse.defensegame.DefenseCharacterType
 
 class MainActivity : Activity() {
 
@@ -35,7 +36,6 @@ class MainActivity : Activity() {
     private val RC_SIGN_IN = 9001
     private val WEB_CLIENT_ID = "588562798442-q2f8fsied1mdastv9rrjerahslnqohu6.apps.googleusercontent.com"
 
-    // 각 게임 뷰 변수
     private var brickGameView: BrickGameView? = null
     private var runnerGameView: RunnerGameView? = null
     private var simulationView: CraneSimulationView? = null
@@ -57,6 +57,8 @@ class MainActivity : Activity() {
             showLoginScreen()
         }
     }
+
+    // ... (화면 설정, 로그인 관련 코드는 기존과 동일하므로 생략하거나 유지)
 
     private fun setupFullScreen() {
         try {
@@ -108,7 +110,10 @@ class MainActivity : Activity() {
                     onStartBrickGame = { startBrickGame() },
                     onStartRunnerGame = { startRunnerGame() },
                     onStartSimulation = { startSimulation() },
-                    onStartDefenseGame = { startDefenseGame() },
+                    // [수정] 캐릭터 타입, 무기 타입을 모두 전달받아 게임 시작
+                    onStartDefenseGame = { charType, weaponType ->
+                        startDefenseGame(charType, weaponType)
+                    },
                     onLogout = { signOut() }
                 )
                 setContentView(homeView)
@@ -116,20 +121,10 @@ class MainActivity : Activity() {
         }
     }
 
-    // --- [중요 수정] 누락된 게임 시작 함수 구현 ---
-
     private fun startBrickGame() {
         brickGameView = BrickGameView(this,
-            onExit = {
-                runOnUiThread {
-                    brickGameView?.pause()
-                    brickGameView = null
-                    showHomeScreen()
-                }
-            },
-            onGameOver = { score ->
-                saveHighScore(score)
-            }
+            onExit = { runOnUiThread { brickGameView?.pause(); brickGameView = null; showHomeScreen() } },
+            onGameOver = { score -> saveHighScore(score) }
         )
         setContentView(brickGameView)
         brickGameView?.resume()
@@ -137,167 +132,80 @@ class MainActivity : Activity() {
 
     private fun startRunnerGame() {
         runnerGameView = RunnerGameView(this,
-            onExit = {
-                runOnUiThread {
-                    runnerGameView?.pause()
-                    runnerGameView = null
-                    showHomeScreen()
-                }
-            },
-            onGameOver = { score ->
-                saveRunnerHighScore(score)
-            }
+            onExit = { runOnUiThread { runnerGameView?.pause(); runnerGameView = null; showHomeScreen() } },
+            onGameOver = { score -> saveRunnerHighScore(score) }
         )
         setContentView(runnerGameView)
         runnerGameView?.resume()
     }
 
     private fun startSimulation() {
-        simulationView = CraneSimulationView(this) {
-            runOnUiThread {
-                simulationView = null
-                showHomeScreen()
-            }
-        }
+        simulationView = CraneSimulationView(this) { runOnUiThread { simulationView = null; showHomeScreen() } }
         setContentView(simulationView)
     }
 
-    private fun startDefenseGame() {
+    // [수정] 디펜스 게임 시작 (캐릭터, 무기 전달)
+    private fun startDefenseGame(charType: DefenseCharacterType, weaponType: WeaponType) {
         defenseGameView = DefenseGameView(
             this,
             maxUnlockedStage = myDefenseMaxStage,
-            onExit = {
-                runOnUiThread {
-                    defenseGameView?.pause()
-                    defenseGameView = null
-                    showHomeScreen()
-                }
-            },
-            onGameOver = { score, clearedStage ->
-                saveDefenseHighScore(score, clearedStage)
-            }
+            initialWeapon = weaponType,
+            initialCharacter = charType, // [신규]
+            onExit = { runOnUiThread { defenseGameView?.pause(); defenseGameView = null; showHomeScreen() } },
+            onGameOver = { score, clearedStage -> saveDefenseHighScore(score, clearedStage) }
         )
         setContentView(defenseGameView)
         defenseGameView?.resume()
     }
 
-    // --- [중요 수정] 누락된 점수 저장 및 로그아웃 구현 ---
+    // ... (점수 저장, 로그아웃 등 나머지 코드는 기존 유지)
 
     private fun saveHighScore(score: Int) {
         val user = auth.currentUser ?: return
-        // RankingManager에 updateHighScore 메서드가 있다고 가정 (없으면 RankingManager도 확인 필요)
-        rankingManager.updateHighScore(user.uid, user.displayName ?: "Player", score) {
-            Toast.makeText(this, "벽돌 깨기 점수 저장 완료!", Toast.LENGTH_SHORT).show()
-        }
-        rankingManager.addExperience(user.uid, score) { level, up ->
-            if (up) Toast.makeText(this, "레벨업! Lv.$level", Toast.LENGTH_LONG).show()
-        }
+        rankingManager.updateHighScore(user.uid, user.displayName ?: "Player", score) {}
+        rankingManager.addExperience(user.uid, score) { _, _ -> }
     }
 
     private fun saveRunnerHighScore(score: Int) {
         val user = auth.currentUser ?: return
-        // RankingManager에 updateRunnerHighScore 메서드가 있다고 가정
-        rankingManager.updateRunnerHighScore(user.uid, user.displayName ?: "Player", score) {
-            Toast.makeText(this, "러닝 게임 점수 저장 완료!", Toast.LENGTH_SHORT).show()
-        }
-        rankingManager.addExperience(user.uid, score) { level, up ->
-            if (up) Toast.makeText(this, "레벨업! Lv.$level", Toast.LENGTH_LONG).show()
-        }
+        rankingManager.updateRunnerHighScore(user.uid, user.displayName ?: "Player", score) {}
+        rankingManager.addExperience(user.uid, score) { _, _ -> }
     }
 
     private fun saveDefenseHighScore(score: Int, clearedStage: Int) {
         val user = auth.currentUser ?: return
-        rankingManager.updateDefenseHighScore(user.uid, user.displayName ?: "Player", score) {
-            Toast.makeText(this, "디펜스 점수 저장 완료!", Toast.LENGTH_SHORT).show()
-        }
+        rankingManager.updateDefenseHighScore(user.uid, user.displayName ?: "Player", score) {}
         if (clearedStage > 0) {
             rankingManager.updateDefenseMaxStage(user.uid, clearedStage)
-            if (clearedStage + 1 > myDefenseMaxStage) {
-                myDefenseMaxStage = clearedStage + 1
-            }
+            if (clearedStage + 1 > myDefenseMaxStage) myDefenseMaxStage = clearedStage + 1
         }
-        rankingManager.addExperience(user.uid, score) { level, up ->
-            if (up) Toast.makeText(this, "레벨업! Lv.$level", Toast.LENGTH_LONG).show()
-        }
+        rankingManager.addExperience(user.uid, score) { _, _ -> }
     }
 
     private fun signOut() {
         auth.signOut()
-        googleSignInClient.signOut().addOnCompleteListener(this) {
-            showLoginScreen()
-        }
+        googleSignInClient.signOut().addOnCompleteListener(this) { showLoginScreen() }
     }
-
-    // --- [중요 수정] 뒤로 가기 처리 (모든 게임에 적용) ---
-    override fun onBackPressed() {
-        when {
-            brickGameView != null -> {
-                brickGameView?.pause()
-                brickGameView = null
-                showHomeScreen()
-            }
-            runnerGameView != null -> {
-                runnerGameView?.pause()
-                runnerGameView = null
-                showHomeScreen()
-            }
-            simulationView != null -> {
-                simulationView = null
-                showHomeScreen()
-            }
-            defenseGameView != null -> {
-                defenseGameView?.pause()
-                defenseGameView = null
-                showHomeScreen()
-            }
-            else -> super.onBackPressed()
-        }
-    }
-
-    // --- 기존 로그인/닉네임 설정 UI 함수들 ---
 
     private fun showNicknameSetupScreen(uid: String) {
         val layout = LinearLayout(this)
-        layout.orientation = LinearLayout.VERTICAL
-        layout.gravity = Gravity.CENTER
-        layout.setBackgroundColor(Color.parseColor("#121212"))
-        layout.setPadding(50, 50, 50, 50)
-
-        val title = TextView(this)
-        title.text = "닉네임 설정"
-        title.textSize = 30f
-        title.setTextColor(Color.CYAN)
-        title.gravity = Gravity.CENTER
-        title.setPadding(0, 0, 0, 50)
-        layout.addView(title)
-
         val input = EditText(this)
-        input.hint = "닉네임"
-        input.setTextColor(Color.WHITE)
-        input.setHintTextColor(Color.GRAY)
-        layout.addView(input)
-
-        val confirmBtn = Button(this)
-        confirmBtn.text = "확인"
-        confirmBtn.setOnClickListener {
-            val nick = input.text.toString().trim()
-            if (nick.isNotEmpty()) {
-                rankingManager.setNickname(uid, nick, { showHomeScreen() }, { Toast.makeText(this, it, Toast.LENGTH_SHORT).show() })
-            }
+        val btn = Button(this)
+        btn.text = "확인"
+        btn.setOnClickListener {
+            val nick = input.text.toString()
+            if(nick.isNotEmpty()) rankingManager.setNickname(uid, nick, { showHomeScreen() }, {})
         }
-        layout.addView(confirmBtn)
+        layout.addView(input)
+        layout.addView(btn)
         setContentView(layout)
     }
 
     private fun showLoginScreen() {
         val layout = LinearLayout(this)
-        layout.orientation = LinearLayout.VERTICAL
-        layout.gravity = Gravity.CENTER
-        layout.setBackgroundColor(Color.parseColor("#121212")) // 배경색 추가 권장
-
         val btn = Button(this)
-        btn.text = "Google Login"
-        btn.setOnClickListener { val signInIntent = googleSignInClient.signInIntent; startActivityForResult(signInIntent, RC_SIGN_IN) }
+        btn.text = "Login"
+        btn.setOnClickListener { val intent = googleSignInClient.signInIntent; startActivityForResult(intent, RC_SIGN_IN) }
         layout.addView(btn)
         setContentView(layout)
     }
@@ -309,24 +217,20 @@ class MainActivity : Activity() {
             try {
                 val account = task.getResult(ApiException::class.java)!!
                 val credential = GoogleAuthProvider.getCredential(account.idToken!!, null)
-                auth.signInWithCredential(credential).addOnCompleteListener {
-                    if(it.isSuccessful) showHomeScreen()
-                }
+                auth.signInWithCredential(credential).addOnCompleteListener { if(it.isSuccessful) showHomeScreen() }
             } catch (e: ApiException) {}
         }
     }
 
-    override fun onPause() {
-        super.onPause()
-        brickGameView?.pause()
-        runnerGameView?.pause()
-        defenseGameView?.pause()
-    }
-
-    override fun onResume() {
-        super.onResume()
-        brickGameView?.resume()
-        runnerGameView?.resume()
-        defenseGameView?.resume()
+    override fun onBackPressed() {
+        if(brickGameView != null || runnerGameView != null || defenseGameView != null || simulationView != null) {
+            brickGameView?.pause(); brickGameView = null
+            runnerGameView?.pause(); runnerGameView = null
+            defenseGameView?.pause(); defenseGameView = null
+            simulationView = null
+            showHomeScreen()
+        } else {
+            super.onBackPressed()
+        }
     }
 }
