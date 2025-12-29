@@ -2,12 +2,14 @@ package com.donghwa.gameVerse
 
 import android.app.AlertDialog
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.view.Gravity
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
@@ -17,11 +19,16 @@ class HomeView(
     private val userName: String,
     private val highScore: Int,
     private val runnerHighScore: Int,
-    private val leaderboard: List<String>,       // 벽돌 랭킹
-    private val runnerLeaderboard: List<String>, // 러닝 랭킹
+    private val defenseHighScore: Int,
+    private val level: Int,
+    private val currentXp: Int,
+    private val leaderboard: List<String>,
+    private val runnerLeaderboard: List<String>,
+    private val defenseLeaderboard: List<String>,
     private val onStartBrickGame: () -> Unit,
     private val onStartRunnerGame: () -> Unit,
-    private val onStartSimulation: () -> Unit,   // [추가] 시뮬레이션 실행 콜백
+    private val onStartSimulation: () -> Unit,
+    private val onStartDefenseGame: () -> Unit,
     private val onLogout: () -> Unit
 ) : FrameLayout(context) {
 
@@ -44,7 +51,7 @@ class HomeView(
             LayoutParams.MATCH_PARENT
         )
         // 정보창 공간 확보를 위해 여백 조정
-        paramsCenter.setMargins(0, 350, 0, 0)
+        paramsCenter.setMargins(0, 500, 0, 0)
         centerLayout.layoutParams = paramsCenter
 
         val title = TextView(context)
@@ -52,48 +59,56 @@ class HomeView(
         title.textSize = 50f
         title.setTextColor(Color.CYAN)
         title.gravity = Gravity.CENTER
-        title.setPadding(0, 0, 0, 40)
+        title.setPadding(0, 0, 0, 20)
         centerLayout.addView(title)
 
-        // 기존 벽돌깨기 버튼
+        val btnParams = LinearLayout.LayoutParams(600, 130)
+        btnParams.setMargins(0, 15, 0, 15)
+
+        // 벽돌깨기 버튼
         val startBrickBtn = Button(context)
         startBrickBtn.text = "🧱 벽돌 깨기 시작"
-        startBrickBtn.textSize = 20f
+        startBrickBtn.textSize = 18f
         startBrickBtn.setBackgroundColor(Color.parseColor("#FF4081"))
         startBrickBtn.setTextColor(Color.WHITE)
-        val btnParams = LinearLayout.LayoutParams(600, 140)
-        btnParams.setMargins(0, 20, 0, 20)
         startBrickBtn.layoutParams = btnParams
         startBrickBtn.setOnClickListener { onStartBrickGame() }
         centerLayout.addView(startBrickBtn)
 
-        // 기존 러닝게임 버튼
+        // 러닝게임 버튼
         val startRunnerBtn = Button(context)
         startRunnerBtn.text = "🏃 무한 러닝 시작"
-        startRunnerBtn.textSize = 20f
+        startRunnerBtn.textSize = 18f
         startRunnerBtn.setBackgroundColor(Color.parseColor("#00E5FF"))
         startRunnerBtn.setTextColor(Color.BLACK)
         startRunnerBtn.layoutParams = btnParams
         startRunnerBtn.setOnClickListener { onStartRunnerGame() }
         centerLayout.addView(startRunnerBtn)
 
-        // [추가] 크레인 시뮬레이션 버튼
+        // 디펜스 게임 버튼
+        val startDefenseBtn = Button(context)
+        startDefenseBtn.text = "🛡️ 디펜스 게임 시작"
+        startDefenseBtn.textSize = 18f
+        startDefenseBtn.setBackgroundColor(Color.parseColor("#76FF03")) // 연두색
+        startDefenseBtn.setTextColor(Color.BLACK)
+        startDefenseBtn.layoutParams = btnParams
+        startDefenseBtn.setOnClickListener { onStartDefenseGame() }
+        centerLayout.addView(startDefenseBtn)
+
+        // 크레인 시뮬레이션 버튼
         val startSimBtn = Button(context)
         startSimBtn.text = "🏗️ 크레인 시뮬레이션"
-        startSimBtn.textSize = 20f
-        startSimBtn.setBackgroundColor(Color.parseColor("#FF9800")) // 건설 장비 느낌 (주황)
+        startSimBtn.textSize = 18f
+        startSimBtn.setBackgroundColor(Color.parseColor("#FF9800"))
         startSimBtn.setTextColor(Color.WHITE)
-        // 변수명 충돌 방지: simBtnParams 사용
-        val simBtnParams = LinearLayout.LayoutParams(600, 140)
-        simBtnParams.setMargins(0, 20, 0, 20)
-        startSimBtn.layoutParams = simBtnParams
+        startSimBtn.layoutParams = btnParams
         startSimBtn.setOnClickListener { onStartSimulation() }
         centerLayout.addView(startSimBtn)
 
         addView(centerLayout)
 
 
-        // --- [2. 정보 표시 레이아웃 (상단 스크롤 가능)] ---
+        // --- [2. 정보 표시 레이아웃 (상단)] ---
         val infoLayout = LinearLayout(context)
         infoLayout.orientation = LinearLayout.VERTICAL
         infoLayout.gravity = Gravity.CENTER_HORIZONTAL
@@ -102,39 +117,71 @@ class HomeView(
             LayoutParams.WRAP_CONTENT
         )
         paramsInfo.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-        paramsInfo.setMargins(0, 80, 0, 0) // 상단 여백
+        paramsInfo.setMargins(0, 50, 0, 0) // 상단 여백
         infoLayout.layoutParams = paramsInfo
 
         // 환영 메시지
         val welcomeText = TextView(context)
-        welcomeText.text = "환영합니다, ${userName}님!"
-        welcomeText.textSize = 18f
+        welcomeText.text = "Lv.$level $userName"
+        welcomeText.textSize = 24f
         welcomeText.setTextColor(Color.WHITE)
         welcomeText.gravity = Gravity.CENTER
         welcomeText.setTypeface(null, Typeface.BOLD)
         infoLayout.addView(welcomeText)
 
-        // 점수 요약 (가로 배치)
+        // 경험치 바
+        val xpLayout = LinearLayout(context)
+        xpLayout.orientation = LinearLayout.VERTICAL
+        xpLayout.gravity = Gravity.CENTER
+        xpLayout.setPadding(100, 5, 100, 5)
+
+        val requiredXp = level * 100
+        val xpBar = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal)
+        xpBar.max = requiredXp
+        xpBar.progress = currentXp
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            xpBar.progressTintList = ColorStateList.valueOf(Color.CYAN)
+        }
+        xpBar.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 20)
+
+        val xpText = TextView(context)
+        xpText.text = "EXP: $currentXp / $requiredXp"
+        xpText.textSize = 12f
+        xpText.setTextColor(Color.LTGRAY)
+        xpText.gravity = Gravity.END
+
+        xpLayout.addView(xpBar)
+        xpLayout.addView(xpText)
+        infoLayout.addView(xpLayout)
+
+        // 점수 요약
         val scoreLayout = LinearLayout(context)
         scoreLayout.orientation = LinearLayout.HORIZONTAL
         scoreLayout.gravity = Gravity.CENTER
-        scoreLayout.setPadding(0, 10, 0, 20)
+        scoreLayout.setPadding(0, 5, 0, 10)
 
         val brickScoreText = TextView(context)
-        brickScoreText.text = "벽돌 최고: $highScore  "
-        brickScoreText.textSize = 14f
+        brickScoreText.text = "벽돌: $highScore  "
+        brickScoreText.textSize = 12f
         brickScoreText.setTextColor(Color.YELLOW)
         scoreLayout.addView(brickScoreText)
 
         val runnerScoreText = TextView(context)
-        runnerScoreText.text = "  러닝 최고: $runnerHighScore"
-        runnerScoreText.textSize = 14f
+        runnerScoreText.text = "러닝: $runnerHighScore  "
+        runnerScoreText.textSize = 12f
         runnerScoreText.setTextColor(Color.GREEN)
         scoreLayout.addView(runnerScoreText)
 
+        // 디펜스 점수 표시
+        val defenseScoreText = TextView(context)
+        defenseScoreText.text = "디펜스: $defenseHighScore"
+        defenseScoreText.textSize = 12f
+        defenseScoreText.setTextColor(Color.parseColor("#76FF03"))
+        scoreLayout.addView(defenseScoreText)
+
         infoLayout.addView(scoreLayout)
 
-        // --- 랭킹 컨테이너 (가로로 배치하여 공간 절약) ---
+        // --- 랭킹 컨테이너 (3열로 수정) ---
         val rankContainer = LinearLayout(context)
         rankContainer.orientation = LinearLayout.HORIZONTAL
         rankContainer.gravity = Gravity.CENTER_HORIZONTAL or Gravity.TOP
@@ -143,15 +190,18 @@ class HomeView(
             LinearLayout.LayoutParams.WRAP_CONTENT
         )
 
-        // 왼쪽: 벽돌 랭킹
         val leftRank = createRankView("🏆 벽돌 랭킹", leaderboard, Color.YELLOW)
         leftRank.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
 
-        // 오른쪽: 러닝 랭킹
-        val rightRank = createRankView("🏃 러닝 랭킹", runnerLeaderboard, Color.GREEN)
+        val centerRank = createRankView("🏃 러닝 랭킹", runnerLeaderboard, Color.GREEN)
+        centerRank.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+
+        // 디펜스 랭킹
+        val rightRank = createRankView("🛡️ 디펜스 랭킹", defenseLeaderboard, Color.parseColor("#76FF03"))
         rightRank.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
 
         rankContainer.addView(leftRank)
+        rankContainer.addView(centerRank)
         rankContainer.addView(rightRank)
 
         infoLayout.addView(rankContainer)
@@ -180,15 +230,15 @@ class HomeView(
         addView(settingsBtn)
     }
 
-    // [헬퍼 함수] 랭킹 리스트 뷰 생성
     private fun createRankView(title: String, list: List<String>, color: Int): LinearLayout {
         val layout = LinearLayout(context)
         layout.orientation = LinearLayout.VERTICAL
         layout.gravity = Gravity.CENTER_HORIZONTAL
+        layout.setPadding(5, 0, 5, 0)
 
         val titleView = TextView(context)
         titleView.text = title
-        titleView.textSize = 14f
+        titleView.textSize = 12f
         titleView.setTextColor(color)
         titleView.setTypeface(null, Typeface.BOLD)
         titleView.gravity = Gravity.CENTER
@@ -197,20 +247,19 @@ class HomeView(
         if (list.isEmpty()) {
             val emptyText = TextView(context)
             emptyText.text = "-"
-            emptyText.textSize = 12f
+            emptyText.textSize = 10f
             emptyText.setTextColor(Color.GRAY)
             emptyText.gravity = Gravity.CENTER
             layout.addView(emptyText)
         } else {
             for ((index, entry) in list.withIndex()) {
                 val itemText = TextView(context)
-                // 이름이 너무 길면 잘리게 처리
                 val parts = entry.split(" : ")
-                val name = if (parts[0].length > 5) parts[0].substring(0, 5) + ".." else parts[0]
+                val name = if (parts[0].length > 4) parts[0].substring(0, 4) + "." else parts[0]
                 val score = if (parts.size > 1) parts[1] else ""
 
-                itemText.text = "${index + 1}. $name : $score"
-                itemText.textSize = 12f
+                itemText.text = "${index + 1}.$name:$score"
+                itemText.textSize = 10f
                 itemText.setTextColor(Color.LTGRAY)
                 itemText.gravity = Gravity.CENTER
                 layout.addView(itemText)
