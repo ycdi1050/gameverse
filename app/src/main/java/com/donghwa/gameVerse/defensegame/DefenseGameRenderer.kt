@@ -74,32 +74,63 @@ class DefenseGameRenderer(private val state: DefenseGameState) {
 
     private fun drawDrops(canvas: Canvas) {
         for (drop in state.drops) {
-            val size = 40f
-            paint.style = Paint.Style.FILL
-            paint.color = drop.weaponGrade.getColor()
-            paint.alpha = 100
-            canvas.drawCircle(drop.x, drop.y, size + 10, paint)
+            // [수정] 무기 비트맵(PNG) 가져오기 시도
+            val bitmap = ResourceManager.getWeaponBitmap(drop.weaponType, drop.weaponGrade)
 
-            paint.alpha = 255
-            paint.color = Color.parseColor("#FFD700")
-            canvas.drawRect(drop.x - size/2, drop.y - size/2, drop.x + size/2, drop.y + size/2, paint)
+            if (bitmap != null) {
+                // 이미지가 있을 경우: 등급 색상의 빛나는 효과 + 아이콘
+                val size = 80f // 아이콘 크기
 
-            paint.color = Color.RED
-            canvas.drawRect(drop.x - 5, drop.y - size/2, drop.x + 5, drop.y + size/2, paint)
-            canvas.drawRect(drop.x - size/2, drop.y - 5, drop.x + size/2, drop.y + 5, paint)
+                // 배경 글로우 (등급 색상)
+                paint.style = Paint.Style.FILL
+                paint.color = drop.weaponGrade.getColor()
+                paint.alpha = 80 // 반투명
+                canvas.drawCircle(drop.x, drop.y, size / 2 + 15, paint)
+                paint.alpha = 255
 
-            paint.color = Color.BLACK
-            paint.textSize = 25f
-            paint.textAlign = Paint.Align.CENTER
-            val initial = drop.weaponType.name.first().toString()
-            canvas.drawText(initial, drop.x, drop.y - size/2 - 10, paint)
+                // 테두리
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = 3f
+                paint.color = drop.weaponGrade.getColor()
+                canvas.drawCircle(drop.x, drop.y, size / 2 + 15, paint)
+                paint.style = Paint.Style.FILL
 
-            val timeLeft = (drop.lifeTime - (System.currentTimeMillis() - drop.creationTime)) / 1000f
-            if (timeLeft < 2.0f && !drop.isCollecting) {
-                paint.color = Color.WHITE
-                paint.textSize = 20f
-                canvas.drawText(String.format("%.1f", timeLeft), drop.x, drop.y + size + 10, paint)
+                // 아이콘 그리기
+                val destRect = RectF(
+                    drop.x - size / 2,
+                    drop.y - size / 2,
+                    drop.x + size / 2,
+                    drop.y + size / 2
+                )
+                // 비트맵 필터링으로 부드럽게
+                paint.isFilterBitmap = true
+                canvas.drawBitmap(bitmap, null, destRect, paint)
+                paint.isFilterBitmap = false
+
+            } else {
+                // 이미지가 없을 경우: 기존 도형 방식 사용 (Fallback)
+                val size = 40f
+                paint.style = Paint.Style.FILL
+                paint.color = drop.weaponGrade.getColor()
+                paint.alpha = 100
+                canvas.drawCircle(drop.x, drop.y, size + 10, paint)
+
+                paint.alpha = 255
+                paint.color = Color.parseColor("#FFD700")
+                canvas.drawRect(drop.x - size/2, drop.y - size/2, drop.x + size/2, drop.y + size/2, paint)
+
+                paint.color = Color.RED
+                canvas.drawRect(drop.x - 5, drop.y - size/2, drop.x + 5, drop.y + size/2, paint)
+                canvas.drawRect(drop.x - size/2, drop.y - 5, drop.x + size/2, drop.y + 5, paint)
+
+                paint.color = Color.BLACK
+                paint.textSize = 25f
+                paint.textAlign = Paint.Align.CENTER
+                val initial = drop.weaponType.name.first().toString()
+                canvas.drawText(initial, drop.x, drop.y - size/2 - 10, paint)
             }
+
+            // 아이템이 사라지지 않으므로 남은 시간 표시 로직 제거됨
         }
     }
 

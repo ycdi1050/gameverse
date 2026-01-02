@@ -15,6 +15,7 @@ import android.widget.Toast
 import com.donghwa.gameVerse.character.CharacterDataManager
 import com.donghwa.gameVerse.defensegame.DefenseCharacterPopup
 import com.donghwa.gameVerse.defensegame.DefenseCharacterType
+import com.donghwa.gameVerse.defensegame.ResourceManager
 import com.donghwa.gameVerse.defensegame.WeaponType
 import com.donghwa.gameVerse.defensegame.WeaponGrade
 
@@ -40,6 +41,8 @@ class HomeView(
 ) : FrameLayout(context) {
 
     init {
+        // [최적화] 홈 화면 진입 시점에 리소스 미리 로드 (캐싱되어 있다면 즉시 반환됨)
+        ResourceManager.init(context)
         setupUI()
     }
 
@@ -73,7 +76,7 @@ class HomeView(
         quickStartBtn.setTextColor(Color.BLACK)
         quickStartBtn.layoutParams = btnParams
         quickStartBtn.setOnClickListener {
-            // [수정] 중복 로딩 제거하고 즉시 시작
+            // [수정] 중복 로딩 제거하고 즉시 시작 (DB 요청 X)
             startDefenseGameImmediately()
         }
         centerLayout.addView(quickStartBtn)
@@ -86,9 +89,9 @@ class HomeView(
         hangarBtn.setTextColor(Color.WHITE)
         hangarBtn.layoutParams = btnParams
         hangarBtn.setOnClickListener {
-            // 팝업 표시 (DefenseCharacterPopup 내부에서 데이터를 확인하므로 약간의 로딩이 있을 수 있으나,
-            // MainActivity에서 이미 로드했으므로 Firestore 캐시 덕분에 훨씬 빠를 것입니다)
-            DefenseCharacterPopup(context, uid) { charType, weaponType, grade ->
+            // [최적화] 팝업 생성 시 이미 데이터가 로드된 characterDataManager를 전달
+            // 이렇게 하면 팝업 내부에서 DB를 다시 호출하지 않아도 되므로 즉시 열림
+            DefenseCharacterPopup(context, uid, characterDataManager) { charType, weaponType, grade ->
                 onStartDefenseGame(charType, weaponType, grade)
             }.show()
         }
@@ -114,7 +117,7 @@ class HomeView(
     private fun startDefenseGameImmediately() {
         // MainActivity에서 이미 loadDefenseInventory를 완료했으므로
         // characterDataManager의 변수에는 최신 데이터가 들어있습니다.
-        // 따라서 별도 로딩 없이 바로 게임을 시작합니다.
+        // 따라서 별도 로딩(콜백) 없이 바로 변수값으로 게임을 시작합니다.
 
         val charType = characterDataManager.equippedDefenseCharacter
         val weaponType = characterDataManager.equippedDefenseWeapon

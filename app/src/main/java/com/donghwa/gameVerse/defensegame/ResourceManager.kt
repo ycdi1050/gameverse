@@ -21,7 +21,15 @@ object ResourceManager {
 
     private const val GRID_SIZE = 400
 
+    // [최적화] 이미 초기화되었는지 확인하는 플래그
+    private var isInitialized = false
+
     fun init(context: Context) {
+        // [최적화] 이미 로드된 리소스가 있다면 다시 로드하지 않음 (즉시 반환)
+        if (isInitialized && weaponBitmaps.isNotEmpty()) {
+            return
+        }
+
         // 1. 모든 무기 타입과 등급 조합에 대해 이미지 로드 시도
         for (type in WeaponType.values()) {
             for (grade in WeaponGrade.values()) {
@@ -62,19 +70,10 @@ object ResourceManager {
         loadBitmapSafe(context, "unit_alien")?.let { unitBitmaps[DefenseCharacterType.ALIEN] = scaleBitmap(it) }
 
         // 4. [신규] 캐릭터+무기 결합 이미지 로드
-        // 모든 캐릭터 타입과 무기 타입의 조합에 대해 리소스 로드 시도
-        // 예: potato_bow.png, robot_smg.png 등
         for (charType in DefenseCharacterType.values()) {
             for (weaponType in WeaponType.values()) {
                 val key = "${charType.name}_${weaponType.name}" // 예: POTATO_BOW
-                // 리소스 이름 규칙: potato_bow, robot_smg (모두 소문자)
-                // 만약 characterType이 POTATO이고 weaponType이 BOW라면 "potato_bow"를 찾음
-                val charName = if (charType == DefenseCharacterType.POTATO) "potato" else "unit_${charType.name.lowercase()}"
-                // 위 규칙이 복잡하다면 단순화: type.name.lowercase() 사용
-                // 여기서는 "potato_bow" 같은 이름을 가정하므로 아래와 같이 처리
 
-                // 단순화된 규칙 사용: {캐릭터타입소문자}_{무기타입소문자}
-                // 단, POTATO는 "potato", 나머지는 ENUM 이름 그대로 사용한다고 가정할 경우:
                 val prefix = if (charType == DefenseCharacterType.POTATO) "potato" else charType.name.lowercase()
                 val resName = "${prefix}_${weaponType.name.lowercase()}"
 
@@ -83,6 +82,9 @@ object ResourceManager {
                 }
             }
         }
+
+        // 초기화 완료 플래그 설정
+        isInitialized = true
     }
 
     // 등급과 타입을 받아서 해당 비트맵 반환

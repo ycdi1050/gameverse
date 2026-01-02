@@ -20,9 +20,12 @@ import com.donghwa.gameVerse.character.CharacterDataManager
 class DefenseCharacterPopup(
     private val context: Context,
     private val uid: String,
+    // [최적화] 외부에서 이미 데이터가 로드된 Manager를 주입받음
+    private val dataManager: CharacterDataManager,
     private val onStart: (DefenseCharacterType, WeaponType, WeaponGrade) -> Unit
 ) {
-    private val dataManager = CharacterDataManager()
+    // [제거] 내부에서 새로 생성하면 DB를 다시 불러오므로 제거
+    // private val dataManager = CharacterDataManager()
 
     private var equippedCharacter: DefenseCharacterType? = null
     private var equippedWeapon: WeaponType? = null
@@ -48,12 +51,12 @@ class DefenseCharacterPopup(
     private var slotViewsMap = mutableMapOf<SlotType, SlotViews>()
 
     fun show() {
+        // [최적화] 리소스가 이미 로드되어 있으면 즉시 리턴 (ResourceManager 내부 로직)
         ResourceManager.init(context)
 
-        Toast.makeText(context, "인벤토리 정보를 불러오는 중...", Toast.LENGTH_SHORT).show()
-        dataManager.loadDefenseInventory(uid) {
-            showInventoryDialog()
-        }
+        // [최적화] DB 로딩 대기 메시지 제거 및 즉시 UI 표시
+        // 이미 MainActivity에서 데이터를 로드했으므로 dataManager에는 데이터가 존재함
+        showInventoryDialog()
     }
 
     private fun showInventoryDialog() {
@@ -280,7 +283,6 @@ class DefenseCharacterPopup(
             SlotType.UNIT -> {
                 views.label.text = "${type.title}\n${equippedCharacter?.name ?: "없음"}"
                 views.label.setTextColor(Color.CYAN)
-                // [수정] ResourceManager 사용
                 val bitmap = if (equippedCharacter != null) ResourceManager.getUnitBitmap(equippedCharacter!!) else null
                 if (bitmap != null) {
                     views.icon.setImageBitmap(bitmap)
@@ -345,7 +347,6 @@ class DefenseCharacterPopup(
             val isOwned = dataManager.ownedDefenseCharacters.contains(type)
             val isEquipped = equippedCharacter == type
 
-            // [수정] ResourceManager 사용
             val bitmap = ResourceManager.getUnitBitmap(type)
 
             val itemView = createGridItemView(
