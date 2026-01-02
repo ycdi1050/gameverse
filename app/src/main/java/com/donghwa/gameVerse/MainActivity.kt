@@ -2,16 +2,13 @@ package com.donghwa.gameVerse
 
 import android.app.Activity
 import android.content.Intent
-import android.graphics.Color
 import android.os.Bundle
-import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
-import android.widget.TextView
 import android.widget.Toast
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
@@ -19,19 +16,25 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
+import java.util.Random
 
 import com.donghwa.gameVerse.brickgame.BrickGameView
 import com.donghwa.gameVerse.runnergame.RunnerGameView
 import com.donghwa.gameVerse.simulation.CraneSimulationView
+import com.donghwa.gameVerse.character.CharacterDataManager
+
+// [중요] DefenseGame 관련 클래스 Import 확인
 import com.donghwa.gameVerse.defensegame.DefenseGameView
 import com.donghwa.gameVerse.defensegame.WeaponType
 import com.donghwa.gameVerse.defensegame.DefenseCharacterType
+import com.donghwa.gameVerse.defensegame.WeaponGrade
 
 class MainActivity : Activity() {
 
     private lateinit var auth: FirebaseAuth
     private lateinit var googleSignInClient: GoogleSignInClient
     private val rankingManager = RankingManager()
+    private val characterDataManager = CharacterDataManager()
 
     private val RC_SIGN_IN = 9001
     private val WEB_CLIENT_ID = "588562798442-q2f8fsied1mdastv9rrjerahslnqohu6.apps.googleusercontent.com"
@@ -57,8 +60,6 @@ class MainActivity : Activity() {
             showLoginScreen()
         }
     }
-
-    // ... (화면 설정, 로그인 관련 코드는 기존과 동일하므로 생략하거나 유지)
 
     private fun setupFullScreen() {
         try {
@@ -98,6 +99,7 @@ class MainActivity : Activity() {
             } else {
                 val homeView = HomeView(
                     this,
+                    uid,
                     nickname,
                     highScore,
                     runnerHighScore,
@@ -110,9 +112,8 @@ class MainActivity : Activity() {
                     onStartBrickGame = { startBrickGame() },
                     onStartRunnerGame = { startRunnerGame() },
                     onStartSimulation = { startSimulation() },
-                    // [수정] 캐릭터 타입, 무기 타입을 모두 전달받아 게임 시작
-                    onStartDefenseGame = { charType, weaponType ->
-                        startDefenseGame(charType, weaponType)
+                    onStartDefenseGame = { charType, weaponType, grade ->
+                        startDefenseGame(charType, weaponType, grade)
                     },
                     onLogout = { signOut() }
                 )
@@ -144,21 +145,33 @@ class MainActivity : Activity() {
         setContentView(simulationView)
     }
 
-    // [수정] 디펜스 게임 시작 (캐릭터, 무기 전달)
-    private fun startDefenseGame(charType: DefenseCharacterType, weaponType: WeaponType) {
+    // [수정] DefenseGameView 생성자 변경 사항 반영 (onItemCollected 콜백 추가)
+    private fun startDefenseGame(charType: DefenseCharacterType, weaponType: WeaponType, grade: WeaponGrade) {
         defenseGameView = DefenseGameView(
             this,
             maxUnlockedStage = myDefenseMaxStage,
             initialWeapon = weaponType,
-            initialCharacter = charType, // [신규]
+            initialCharacter = charType,
+            initialGrade = grade,
             onExit = { runOnUiThread { defenseGameView?.pause(); defenseGameView = null; showHomeScreen() } },
-            onGameOver = { score, clearedStage -> saveDefenseHighScore(score, clearedStage) }
+            onGameOver = { score, clearedStage -> saveDefenseHighScore(score, clearedStage) },
+            // 아이템 획득 콜백
+            onItemCollected = { droppedWeapon, droppedGrade ->
+                val user = auth.currentUser
+                if (user != null) {
+                    characterDataManager.unlockWeapon(user.uid, droppedWeapon, droppedGrade) { success ->
+                        runOnUiThread {
+                            // 획득 메시지는 너무 자주 뜨면 방해되므로 로그성으로 띄우거나, 중요한 등급만 띄울 수도 있음
+                            // 여기선 간단히 유지
+                            // Toast.makeText(this, "아이템 획득!", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
         )
         setContentView(defenseGameView)
         defenseGameView?.resume()
     }
-
-    // ... (점수 저장, 로그아웃 등 나머지 코드는 기존 유지)
 
     private fun saveHighScore(score: Int) {
         val user = auth.currentUser ?: return

@@ -10,14 +10,17 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ProgressBar
-import android.widget.SeekBar
 import android.widget.TextView
+import android.widget.Toast
+import com.donghwa.gameVerse.character.CharacterDataManager
 import com.donghwa.gameVerse.defensegame.DefenseCharacterPopup
 import com.donghwa.gameVerse.defensegame.DefenseCharacterType
 import com.donghwa.gameVerse.defensegame.WeaponType
+import com.donghwa.gameVerse.defensegame.WeaponGrade
 
 class HomeView(
     context: Context,
+    private val uid: String,
     private val userName: String,
     private val highScore: Int,
     private val runnerHighScore: Int,
@@ -30,13 +33,12 @@ class HomeView(
     private val onStartBrickGame: () -> Unit,
     private val onStartRunnerGame: () -> Unit,
     private val onStartSimulation: () -> Unit,
-    // [수정] 캐릭터 타입과 무기 타입을 모두 전달받음
-    private val onStartDefenseGame: (DefenseCharacterType, WeaponType) -> Unit,
+    // [수정] 등급(WeaponGrade)까지 전달받도록 콜백 변경
+    private val onStartDefenseGame: (DefenseCharacterType, WeaponType, WeaponGrade) -> Unit,
     private val onLogout: () -> Unit
 ) : FrameLayout(context) {
 
-    private val PREFS_NAME = "BrickRushPrefs"
-    private val KEY_SENSITIVITY = "paddle_sensitivity"
+    private val characterDataManager = CharacterDataManager()
 
     init {
         setupUI()
@@ -64,20 +66,32 @@ class HomeView(
         val btnParams = LinearLayout.LayoutParams(600, 130)
         btnParams.setMargins(0, 15, 0, 15)
 
-        // [디펜스 게임 버튼]
-        val startDefenseBtn = Button(context)
-        startDefenseBtn.text = "🛡️ 디펜스 게임 시작"
-        startDefenseBtn.textSize = 18f
-        startDefenseBtn.setBackgroundColor(Color.parseColor("#76FF03"))
-        startDefenseBtn.setTextColor(Color.BLACK)
-        startDefenseBtn.layoutParams = btnParams
-        startDefenseBtn.setOnClickListener {
-            // [수정] 캐릭터+무기 선택 팝업 호출
-            DefenseCharacterPopup(context) { charType, weaponType ->
-                onStartDefenseGame(charType, weaponType)
+        // [디펜스 게임 버튼 1: 바로 시작]
+        val quickStartBtn = Button(context)
+        quickStartBtn.text = "🚀 작전 시작 (Quick Start)"
+        quickStartBtn.textSize = 18f
+        quickStartBtn.setBackgroundColor(Color.parseColor("#76FF03"))
+        quickStartBtn.setTextColor(Color.BLACK)
+        quickStartBtn.layoutParams = btnParams
+        quickStartBtn.setOnClickListener {
+            startDefenseGameImmediately()
+        }
+        centerLayout.addView(quickStartBtn)
+
+        // [디펜스 게임 버튼 2: 설정(격납고)]
+        val hangarBtn = Button(context)
+        hangarBtn.text = "⚙️ 격납고 (Hangar)"
+        hangarBtn.textSize = 18f
+        hangarBtn.setBackgroundColor(Color.parseColor("#424242"))
+        hangarBtn.setTextColor(Color.WHITE)
+        hangarBtn.layoutParams = btnParams
+        hangarBtn.setOnClickListener {
+            // [수정] 팝업에서 등급까지 받아서 전달
+            DefenseCharacterPopup(context, uid) { charType, weaponType, grade ->
+                onStartDefenseGame(charType, weaponType, grade)
             }.show()
         }
-        centerLayout.addView(startDefenseBtn)
+        centerLayout.addView(hangarBtn)
 
         // [미니게임 버튼]
         val miniGameBtn = Button(context)
@@ -93,6 +107,18 @@ class HomeView(
 
         // --- 상단 정보 표시 ---
         setupTopInfo(context)
+    }
+
+    // [신규] 저장된 설정으로 바로 게임 시작
+    private fun startDefenseGameImmediately() {
+        Toast.makeText(context, "장비 데이터를 불러오는 중...", Toast.LENGTH_SHORT).show()
+        characterDataManager.loadDefenseInventory(uid) {
+            // 로딩 완료 후 저장된 장비로 바로 시작
+            val charType = characterDataManager.equippedDefenseCharacter
+            val weaponType = characterDataManager.equippedDefenseWeapon
+            val weaponGrade = characterDataManager.equippedDefenseWeaponGrade // 등급 정보 로드
+            onStartDefenseGame(charType, weaponType, weaponGrade)
+        }
     }
 
     private fun setupTopInfo(context: Context) {
@@ -162,37 +188,7 @@ class HomeView(
     }
 
     private fun showMiniGamePopup() {
-        val layout = LinearLayout(context)
-        layout.orientation = LinearLayout.VERTICAL
-        layout.gravity = Gravity.CENTER
-        layout.setPadding(50, 50, 50, 50)
-        layout.setBackgroundColor(Color.parseColor("#212121"))
-
-        val btnParams = LinearLayout.LayoutParams(500, 130)
-        btnParams.setMargins(0, 20, 0, 20)
-
-        fun addGameBtn(text: String, color: Int, action: () -> Unit) {
-            val btn = Button(context)
-            btn.text = text
-            btn.textSize = 16f
-            btn.setBackgroundColor(color)
-            btn.setTextColor(if(color==Color.parseColor("#00E5FF")) Color.BLACK else Color.WHITE)
-            btn.layoutParams = btnParams
-            btn.setOnClickListener { action() }
-            layout.addView(btn)
-        }
-
-        val dialog = AlertDialog.Builder(context)
-            .setTitle("미니게임 선택")
-            .setView(layout)
-            .setNegativeButton("닫기", null)
-            .create()
-
-        addGameBtn("🧱 벽돌 깨기 시작", Color.parseColor("#FF4081")) { dialog.dismiss(); onStartBrickGame() }
-        addGameBtn("🏃 무한 러닝 시작", Color.parseColor("#00E5FF")) { dialog.dismiss(); onStartRunnerGame() }
-        addGameBtn("🏗️ 크레인 시뮬레이션", Color.parseColor("#FF9800")) { dialog.dismiss(); onStartSimulation() }
-
-        dialog.show()
+        MiniGamePopup(context, onStartBrickGame, onStartRunnerGame, onStartSimulation).show()
     }
 
     private fun showSettingsDialog() {

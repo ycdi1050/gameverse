@@ -3,23 +3,19 @@ package com.donghwa.gameVerse.defensegame
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.Bitmap
 import android.graphics.Matrix
+import java.util.Random
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-enum class WeaponType {
-    SMG, SHOTGUN, SNIPER, MISSILE, BOW
-}
-
-// [수정] characterType 필드 추가
 class Character(
     var x: Float,
     var y: Float,
     var weaponType: WeaponType,
-    var characterType: DefenseCharacterType
+    var characterType: DefenseCharacterType,
+    var weaponGrade: WeaponGrade
 ) : GameObject {
     private var angle = -Math.PI / 2
     var damage = 10
@@ -32,6 +28,8 @@ class Character(
     private var recoilOffset = 0f
     private val maxRecoil = 15f
     private val recoilRecovery = 2f
+
+    private val random = Random()
 
     init {
         updateStats()
@@ -50,7 +48,6 @@ class Character(
     private fun updateStats() {
         val bonus = level - 1
 
-        // 1. 무기 기본 스탯
         when (weaponType) {
             WeaponType.SMG -> {
                 damage = 3 + (bonus * 2)
@@ -79,33 +76,31 @@ class Character(
             }
         }
 
-        // 2. 캐릭터 타입 보너스 적용
         when (characterType) {
-            DefenseCharacterType.HUMAN -> {
-                // 밸런스형: 특별한 보너스 없음 (또는 비용 할인 로직 등 외부에서 처리)
-            }
-            DefenseCharacterType.ROBOT -> {
-                // 공격 속도 10% 증가 (딜레이 감소)
-                fireRate = (fireRate * 0.9).toLong()
-            }
-            DefenseCharacterType.ALIEN -> {
-                // 사거리 10% 증가
-                range *= 1.1f
-            }
+            DefenseCharacterType.HUMAN -> {}
+            DefenseCharacterType.ROBOT -> fireRate = (fireRate * 0.9).toLong()
+            DefenseCharacterType.ALIEN -> range *= 1.1f
         }
+
+        val gradeMultiplier = weaponGrade.getDamageMultiplier()
+        damage = (damage * gradeMultiplier).toInt()
     }
 
-    fun autoAttack(enemies: List<Enemy>, currentTime: Long, globalDamageMultiplier: Float = 1.0f): Projectile? {
+    fun autoAttack(enemies: List<Enemy>, currentTime: Long, state: DefenseGameState): Projectile? {
         if (recoilOffset > 0) {
             recoilOffset -= recoilRecovery
             if (recoilOffset < 0) recoilOffset = 0f
         }
 
-        if (currentTime - lastShotTime < fireRate) return null
+        val finalFireRate = (fireRate / state.buffAtkSpeed).toLong()
+
+        if (currentTime - lastShotTime < finalFireRate) return null
+
+        val finalRange = range * state.buffRange
 
         val target = enemies.filter { enemy ->
             val d = dist(x, y, enemy.x, enemy.y)
-            !enemy.isDead && !enemy.reachedEnd && d <= range &&
+            !enemy.isDead && !enemy.reachedEnd && d <= finalRange &&
                     (weaponType != WeaponType.MISSILE || d >= minMissileRange)
         }.sortedByDescending { it.currentPathIndex }.firstOrNull()
 
@@ -122,8 +117,20 @@ class Character(
                 WeaponType.BOW -> Color.WHITE
             }
 
-            val finalDamage = (damage * globalDamageMultiplier).toInt()
-            Projectile(x, y, x, y, target, finalDamage, color, weaponType)
+            var finalDamage = (damage * state.globalDamageMultiplier * state.buffAtkDamage).toInt()
+
+            if (state.isDoubleShot) {
+                finalDamage = (finalDamage * 0.8f).toInt()
+            }
+
+            if (state.buffCritChance > 0 && random.nextFloat() < state.buffCritChance) {
+                finalDamage = (finalDamage * state.buffCritDamage).toInt()
+            }
+
+            val proj = Projectile(x, y, x, y, target, finalDamage, color, weaponType)
+            // [신규] 도탄 횟수 적용
+            proj.ricochetCount = state.buffRicochetCount
+            return proj
         } else {
             null
         }
@@ -132,33 +139,33 @@ class Character(
     override fun update() {}
 
     override fun draw(canvas: Canvas, paint: Paint) {
-        // [수정] 캐릭터 타입에 따라 몸체 그리기
         drawBody(canvas, paint)
-
-        // [수정] 무기 그리기 (기존 로직 + 이미지 없으면 도형)
         drawWeapon(canvas, paint)
 
-        // 레벨 텍스트
         paint.color = Color.WHITE
         paint.textSize = 30f
         paint.textAlign = Paint.Align.CENTER
         canvas.drawText("Lv.$level", x, y + 60f, paint)
+
+        if (weaponGrade != WeaponGrade.NORMAL) {
+            paint.color = weaponGrade.getColor()
+            paint.textSize = 20f
+            canvas.drawText(weaponGrade.name.first().toString(), x, y - 45f, paint)
+        }
     }
 
     private fun drawBody(canvas: Canvas, paint: Paint) {
-        // 이미지가 있다면 ResourceManager에서 가져오겠지만, 여기선 도형으로 구분
         paint.style = Paint.Style.FILL
         paint.color = when (characterType) {
-            DefenseCharacterType.HUMAN -> Color.parseColor("#FFCC80") // 살구색
-            DefenseCharacterType.ROBOT -> Color.parseColor("#B0BEC5") // 회색
-            DefenseCharacterType.ALIEN -> Color.parseColor("#A5D6A7") // 연두색
+            DefenseCharacterType.HUMAN -> Color.parseColor("#FFCC80")
+            DefenseCharacterType.ROBOT -> Color.parseColor("#B0BEC5")
+            DefenseCharacterType.ALIEN -> Color.parseColor("#A5D6A7")
         }
-        canvas.drawCircle(x, y, 35f, paint) // 몸통
+        canvas.drawCircle(x, y, 35f, paint)
 
-        // 테두리
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = 3f
-        paint.color = Color.BLACK
+        paint.color = weaponGrade.getColor()
         canvas.drawCircle(x, y, 35f, paint)
     }
 
@@ -175,15 +182,12 @@ class Character(
             matrix.postTranslate(x + recoilX, y + recoilY)
             canvas.drawBitmap(bitmap, matrix, paint)
         } else {
-            // 무기 이미지가 없을 때 Fallback 도형
             paint.style = Paint.Style.FILL
             paint.color = Color.DKGRAY
-            // 회전된 무기(막대기) 그리기
             canvas.save()
             canvas.translate(x + recoilX, y + recoilY)
             canvas.rotate(degrees)
 
-            // 무기 모양
             val wLen = 50f
             val wWidth = if(weaponType == WeaponType.MISSILE) 15f else 8f
             canvas.drawRect(0f, -wWidth/2, wLen, wWidth/2, paint)
