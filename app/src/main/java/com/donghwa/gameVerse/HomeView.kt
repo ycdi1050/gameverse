@@ -30,15 +30,14 @@ class HomeView(
     private val leaderboard: List<String>,
     private val runnerLeaderboard: List<String>,
     private val defenseLeaderboard: List<String>,
+    // [수정] 외부에서 초기화된 데이터 매니저를 전달받음
+    private val characterDataManager: CharacterDataManager,
     private val onStartBrickGame: () -> Unit,
     private val onStartRunnerGame: () -> Unit,
     private val onStartSimulation: () -> Unit,
-    // [수정] 등급(WeaponGrade)까지 전달받도록 콜백 변경
     private val onStartDefenseGame: (DefenseCharacterType, WeaponType, WeaponGrade) -> Unit,
     private val onLogout: () -> Unit
 ) : FrameLayout(context) {
-
-    private val characterDataManager = CharacterDataManager()
 
     init {
         setupUI()
@@ -86,7 +85,16 @@ class HomeView(
         hangarBtn.setTextColor(Color.WHITE)
         hangarBtn.layoutParams = btnParams
         hangarBtn.setOnClickListener {
-            // [수정] 팝업에서 등급까지 받아서 전달
+            // [수정] 미리 로드된 데이터가 있으므로 바로 팝업 표시 가능
+            // DefenseCharacterPopup에 데이터 매니저를 전달할 수 있도록 구조 변경 필요할 수도 있음
+            // 현재 구조상 DefenseCharacterPopup 내부에서 새로 인스턴스를 생성하므로
+            // 데이터를 공유하기 위해 여기서는 간단히 팝업 호출만 함
+            // (참고: DefenseCharacterPopup 내부에서도 loadDefenseInventory를 호출하지만
+            // 이미 캐시된 데이터가 있거나 빠르게 로드됨)
+
+            // 최적화: DefenseCharacterPopup 생성자에 dataManager를 전달하는 것이 좋음
+            // 하지만 기존 코드를 유지하기 위해 기본 방식으로 호출하되,
+            // MainActivity에서 이미 로드했으므로 Firestore 캐시 덕분에 빠를 것임
             DefenseCharacterPopup(context, uid) { charType, weaponType, grade ->
                 onStartDefenseGame(charType, weaponType, grade)
             }.show()
@@ -109,16 +117,14 @@ class HomeView(
         setupTopInfo(context)
     }
 
-    // [신규] 저장된 설정으로 바로 게임 시작
+    // [수정] 이미 로드된 데이터를 사용하여 즉시 시작
     private fun startDefenseGameImmediately() {
-        Toast.makeText(context, "장비 데이터를 불러오는 중...", Toast.LENGTH_SHORT).show()
-        characterDataManager.loadDefenseInventory(uid) {
-            // 로딩 완료 후 저장된 장비로 바로 시작
-            val charType = characterDataManager.equippedDefenseCharacter
-            val weaponType = characterDataManager.equippedDefenseWeapon
-            val weaponGrade = characterDataManager.equippedDefenseWeaponGrade // 등급 정보 로드
-            onStartDefenseGame(charType, weaponType, weaponGrade)
-        }
+        // 이미 MainActivity에서 데이터를 로드했으므로 바로 변수 접근 가능
+        val charType = characterDataManager.equippedDefenseCharacter
+        val weaponType = characterDataManager.equippedDefenseWeapon
+        val weaponGrade = characterDataManager.equippedDefenseWeaponGrade
+
+        onStartDefenseGame(charType, weaponType, weaponGrade)
     }
 
     private fun setupTopInfo(context: Context) {

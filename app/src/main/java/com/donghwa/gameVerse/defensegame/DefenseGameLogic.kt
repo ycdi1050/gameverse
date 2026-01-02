@@ -15,14 +15,14 @@ class DefenseGameLogic(private val state: DefenseGameState) {
     private val random = Random()
     private val dropManager = DropManager()
 
+    private var lastOptionSelectTime: Long = 0
+
     fun generatePath(w: Int, h: Int) {
         state.mapWidth = w
         state.mapHeight = h
         state.path.clear()
         val gs = state.gridSize
 
-        // [수정] 그리드가 작아짐에 따라 경로가 너무 벽에 붙지 않도록 마진 적용
-        // 화면 좌우에서 약 1.5칸 정도 떨어진 위치를 경로 기준으로 잡음
         val leftX = gs * 1.5f
         val rightX = w - gs * 1.5f
 
@@ -92,10 +92,14 @@ class DefenseGameLogic(private val state: DefenseGameState) {
         }
 
         val now = System.currentTimeMillis()
+        val currentSpeed = state.gameSpeed
+
+        // [수정] 스폰 간격에 배속 적용
+        val effectiveSpawnInterval = state.spawnInterval / currentSpeed
 
         if (state.spawnedEnemies < state.requiredKills + 5) {
-            if (now - state.lastSpawnTime > state.spawnInterval) {
-                var enemySpeed = 3f + (state.stage * 0.5f) + (state.currentWave * 0.2f)
+            if (now - state.lastSpawnTime > effectiveSpawnInterval) {
+                var enemySpeed = 1.2f + (state.stage * 0.3f) + (state.currentWave * 0.1f)
                 enemySpeed *= state.buffEnemySpeed
 
                 state.enemies.add(Enemy(state.path, state.enemyHp, state.enemyDefense, enemySpeed, state.stage))
@@ -103,7 +107,7 @@ class DefenseGameLogic(private val state: DefenseGameState) {
                 state.spawnedEnemies++
             }
         } else if (state.enemies.isEmpty() && state.killsInCurrentStage < state.requiredKills) {
-            var enemySpeed = 3f + (state.stage * 0.5f) + (state.currentWave * 0.2f)
+            var enemySpeed = 1.2f + (state.stage * 0.3f) + (state.currentWave * 0.1f)
             enemySpeed *= state.buffEnemySpeed
 
             state.enemies.add(Enemy(state.path, state.enemyHp, state.enemyDefense, enemySpeed, state.stage))
@@ -111,25 +115,56 @@ class DefenseGameLogic(private val state: DefenseGameState) {
             state.spawnedEnemies++
         }
 
+        // [수정] 캐릭터 공격 로직에 배속 전달
         for (char in state.characters) {
-            val mainProj = char.autoAttack(state.enemies, now, state)
+            val mainProj = char.autoAttack(state.enemies, now, state, currentSpeed)
             if (mainProj != null) {
                 mainProj.speed *= state.buffProjSpeed
-                state.projectiles.add(mainProj)
+
+                val shotsToFire = ArrayList<Projectile>()
+
+                if (state.isMultiShot) {
+                    val target = mainProj.target
+                    if (target != null) {
+                        val baseAngle = atan2((target.y - mainProj.y).toDouble(), (target.x - mainProj.x).toDouble())
+                        val p1 = createCloneProjectile(mainProj, baseAngle - 0.5)
+                        val p2 = createCloneProjectile(mainProj, baseAngle + 0.5)
+                        shotsToFire.add(p1)
+                        shotsToFire.add(p2)
+                    } else {
+                        shotsToFire.add(mainProj)
+                    }
+                } else {
+                    shotsToFire.add(mainProj)
+                }
 
                 if (state.isDoubleShot) {
-                    val offset = 10f
-                    val subProj = Projectile(mainProj.x + offset, mainProj.y + offset, mainProj.originX, mainProj.originY, mainProj.target, mainProj.damage, mainProj.color, mainProj.weaponType)
-                    subProj.speed = mainProj.speed
-                    subProj.ricochetCount = mainProj.ricochetCount
-                    state.projectiles.add(subProj)
+                    val doubleShots = ArrayList<Projectile>()
+                    for (p in shotsToFire) {
+                        val currentTarget = p.target
+                        val angle = if (currentTarget != null) {
+                            atan2((currentTarget.y - p.y).toDouble(), (currentTarget.x - p.x).toDouble())
+                        } else {
+                            0.0
+                        }
+                        val offsetX = -(cos(angle) * 30f).toFloat()
+                        val offsetY = -(sin(angle) * 30f).toFloat()
+                        val clone = createCloneProjectile(p, angle)
+                        clone.x += offsetX
+                        clone.y += offsetY
+                        doubleShots.add(clone)
+                    }
+                    shotsToFire.addAll(doubleShots)
                 }
+
+                state.projectiles.addAll(shotsToFire)
             }
         }
 
+        // [수정] 투사체 업데이트에 배속 전달
         val projToRemove = ArrayList<Projectile>()
         for (p in state.projectiles) {
-            p.update()
+            p.update(currentSpeed)
             if (!p.hasHit) {
                 for (e in state.enemies) {
                     if (e.isDead || e.reachedEnd) continue
@@ -147,9 +182,10 @@ class DefenseGameLogic(private val state: DefenseGameState) {
         }
         state.projectiles.removeAll(projToRemove)
 
+        // [수정] 적군 업데이트에 배속 전달
         val enemiesToRemove = ArrayList<Enemy>()
         for (e in state.enemies) {
-            e.update()
+            e.update(currentSpeed)
             if (e.reachedEnd) {
                 state.lives--
                 enemiesToRemove.add(e)
@@ -176,33 +212,64 @@ class DefenseGameLogic(private val state: DefenseGameState) {
 
         if (!state.isCollectingItems && !state.isGameOver) {
             if (state.killsInCurrentStage >= state.requiredKills && state.enemies.isEmpty()) {
+                // 난이도 증가 시점(웨이브 종료 시) 아이템 자동 수집 트리거
+                state.isCollectingItems = true
+
                 if (state.currentWave < state.maxWaves) {
-                    state.isOptionSelection = true
-                    state.currentOptions = DefenseGameOption.getRandomOptions(2)
+                    // 웨이브 종료 -> 옵션 선택 -> 다음 웨이브
+                    // 수집이 끝난 후 옵션 선택 창으로 이동하도록 로직 변경 필요하지만
+                    // 현재 구조상 updateCollectionPhase 종료 시 분기 처리함
                 } else {
                     state.isStageClear = true
-                    state.isCollectingItems = true
+                    // 스테이지 클리어 -> 수집 -> 종료
                 }
             }
         }
     }
 
+    private fun createCloneProjectile(original: Projectile, angleRad: Double): Projectile {
+        val offsetDist = 15f
+        val perpAngle = angleRad + Math.PI / 2
+        val offX = (cos(perpAngle) * offsetDist).toFloat()
+        val offY = (sin(perpAngle) * offsetDist).toFloat()
+
+        val newX = original.x + offX
+        val newY = original.y + offY
+
+        val clone = Projectile(newX, newY, original.originX, original.originY, original.target, original.damage, original.color, original.weaponType)
+        clone.speed = original.speed
+        clone.ricochetCount = original.ricochetCount
+        return clone
+    }
+
     fun selectOption(option: DefenseGameOption) {
+        state.collectedOptions.add(option)
+
         when (option) {
-            DefenseGameOption.ATK_SPEED_UP -> state.buffAtkSpeed *= 1.25f
-            DefenseGameOption.ATK_DAMAGE_UP -> state.buffAtkDamage *= 1.3f
-            DefenseGameOption.DOUBLE_SHOT -> state.isDoubleShot = true
-            DefenseGameOption.ENEMY_SLOW -> state.buffEnemySpeed *= 0.8f
-            DefenseGameOption.RANGE_UP -> state.buffRange *= 1.2f
-            DefenseGameOption.CRIT_CHANCE_UP -> state.buffCritChance += 0.15f
-            DefenseGameOption.CRIT_DAMAGE_UP -> state.buffCritDamage += 0.5f
-            DefenseGameOption.PROJ_SPEED_UP -> state.buffProjSpeed *= 1.5f
-            DefenseGameOption.MAX_HP_UP -> state.lives += 2
-            DefenseGameOption.INSTANT_REPAIR -> state.lives += 5
-            DefenseGameOption.RICOCHET -> state.buffRicochetCount = 3
+            DefenseGameOption.NORMAL_ATK_UP -> state.buffAtkDamage *= 1.1f
+            DefenseGameOption.NORMAL_SPD_UP -> state.buffAtkSpeed *= 1.1f
+            DefenseGameOption.NORMAL_RANGE_UP -> state.buffRange *= 1.1f
+            DefenseGameOption.NORMAL_HP_UP -> state.lives += 3
+
+            DefenseGameOption.MAGIC_ATK_UP -> state.buffAtkDamage *= 1.2f
+            DefenseGameOption.MAGIC_SPD_UP -> state.buffAtkSpeed *= 1.2f
+            DefenseGameOption.MAGIC_CRIT_UP -> state.buffCritDamage += 0.25f
+
+            DefenseGameOption.RARE_ATK_UP -> state.buffAtkDamage *= 1.3f
+            DefenseGameOption.RARE_SPD_UP -> state.buffAtkSpeed *= 1.3f
+            DefenseGameOption.RARE_CRIT_CHANCE -> state.buffCritChance += 0.1f
+
+            DefenseGameOption.UNIQUE_ATK_UP -> state.buffAtkDamage *= 1.4f
+            DefenseGameOption.UNIQUE_SPD_UP -> state.buffAtkSpeed *= 1.4f
+            DefenseGameOption.UNIQUE_CRIT_DMG -> state.buffCritDamage += 0.5f
+
+            DefenseGameOption.LEGEND_MULTI_SHOT -> state.isMultiShot = true
+            DefenseGameOption.LEGEND_DOUBLE_SHOT -> state.isDoubleShot = true
+            DefenseGameOption.LEGEND_RICOCHET -> state.buffRicochetCount += 3
         }
 
         startNextWave()
+        lastOptionSelectTime = System.currentTimeMillis()
     }
 
     private fun startNextWave() {
@@ -244,9 +311,14 @@ class DefenseGameLogic(private val state: DefenseGameState) {
                 state.isGameOver = true
                 state.isRunning = false
                 onGameOver()
-            } else if (state.isStageClear) {
+            } else if (state.isStageClear) { // 스테이지 클리어
                 state.isRunning = false
                 onStageClear()
+            } else { // 웨이브 클리어 후 아이템 수집 완료 시
+                if (state.currentWave < state.maxWaves) {
+                    state.isOptionSelection = true
+                    state.currentOptions = DefenseGameOption.getRandomOptions(3)
+                }
             }
         }
     }
@@ -333,6 +405,8 @@ class DefenseGameLogic(private val state: DefenseGameState) {
 
     fun handleTouchEvent(action: Int, x: Float, y: Float): Boolean {
         if (state.isCollectingItems || state.isOptionSelection) return false
+
+        if (System.currentTimeMillis() - lastOptionSelectTime < 500) return false
 
         val col = (x / state.gridSize).toInt()
         val row = (y / state.gridSize).toInt()

@@ -1,8 +1,8 @@
 package com.donghwa.gameVerse.character
 
 import com.donghwa.gameVerse.defensegame.DefenseCharacterType
-import com.donghwa.gameVerse.defensegame.WeaponType
 import com.donghwa.gameVerse.defensegame.WeaponGrade
+import com.donghwa.gameVerse.defensegame.WeaponType
 import com.donghwa.gameVerse.item.EquipItem
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
@@ -10,176 +10,241 @@ import com.google.firebase.firestore.SetOptions
 class CharacterDataManager {
     private val db = FirebaseFirestore.getInstance()
 
-    // RPG 장비
+    // --- [섹션 1] 일반 RPG 캐릭터 장비 (CharacterPopup용) ---
     var currentWeaponId: String = "w_001"
     var currentRingId: String = "r_001"
     var currentNecklaceId: String = "n_001"
 
-    // [Defense] 디펜스 게임 데이터
-    var ownedDefenseCharacters = mutableListOf<DefenseCharacterType>()
-
-    // [신규] 무기 인벤토리: Key="WeaponType_WeaponGrade", Value=Count
-    // 예: "SMG_NORMAL" -> 5
-    var weaponInventory = mutableMapOf<String, Int>()
-
-    var equippedDefenseCharacter: DefenseCharacterType = DefenseCharacterType.HUMAN
+    // --- [섹션 2] 디펜스 게임 전용 장비 (DefenseCharacterPopup용) ---
+    // 디펜스 게임 장착 정보 (기본값 POTATO로 변경)
+    var equippedDefenseCharacter: DefenseCharacterType = DefenseCharacterType.POTATO
     var equippedDefenseWeapon: WeaponType = WeaponType.SMG
-    var equippedDefenseWeaponGrade: WeaponGrade = WeaponGrade.NORMAL // [신규] 장착 등급
+    var equippedDefenseWeaponGrade: WeaponGrade = WeaponGrade.NORMAL
 
-    // -----------------------------------------------------------
-    // [Defense] 디펜스 게임 인벤토리 로드
-    // -----------------------------------------------------------
-    fun loadDefenseInventory(uid: String, onComplete: () -> Unit) {
-        db.collection("users").document(uid).get()
+    // 보유한 캐릭터 목록 (기본적으로 POTATO는 가지고 시작)
+    val ownedDefenseCharacters = hashSetOf(DefenseCharacterType.POTATO)
+
+    // 보유한 무기 목록 (타입, 등급) -> 개수
+    // 키: "TYPE_GRADE" (예: "SMG_NORMAL"), 값: 개수
+    val ownedWeapons = HashMap<String, Int>()
+
+    init {
+        // 테스트용 초기 데이터
+        ownedWeapons["SMG_NORMAL"] = 1
+    }
+
+    // ==================================================================================
+    // [메서드 그룹 1] 일반 RPG 장비 관리 (CharacterPopup 연동)
+    // ==================================================================================
+
+    // 장비 저장 (CharacterPopup에서 호출)
+    fun saveEquipment(uid: String, weaponId: String, ringId: String, necklaceId: String, onComplete: () -> Unit) {
+        currentWeaponId = weaponId
+        currentRingId = ringId
+        currentNecklaceId = necklaceId
+
+        val data = hashMapOf(
+            "weaponId" to weaponId,
+            "ringId" to ringId,
+            "necklaceId" to necklaceId
+        )
+
+        db.collection("users").document(uid).collection("equipment").document("current")
+            .set(data, SetOptions.merge())
+            .addOnSuccessListener { onComplete() }
+            .addOnFailureListener { onComplete() }
+    }
+
+    // 일반 장비 데이터 로드
+    fun loadInventory(uid: String, onComplete: () -> Unit) {
+        db.collection("users").document(uid).collection("equipment").document("current").get()
             .addOnSuccessListener { document ->
-                ownedDefenseCharacters.clear()
-                weaponInventory.clear()
-
                 if (document != null && document.exists()) {
-                    // 1. 캐릭터 목록
-                    val charList = document.get("def_owned_chars") as? List<String>
-                    if (charList.isNullOrEmpty()) {
-                        ownedDefenseCharacters.add(DefenseCharacterType.HUMAN)
-                    } else {
-                        charList.forEach { try { ownedDefenseCharacters.add(DefenseCharacterType.valueOf(it)) } catch(e:Exception){} }
-                    }
-
-                    // 2. 무기 인벤토리 (Map)
-                    val invMap = document.get("def_weapon_inventory") as? Map<String, Long>
-                    if (invMap != null) {
-                        for ((key, value) in invMap) {
-                            weaponInventory[key] = value.toInt()
-                        }
-                    } else {
-                        // 기존 리스트 데이터가 있다면 마이그레이션 (모두 NORMAL로 지급)
-                        val oldList = document.get("def_owned_weapons") as? List<String>
-                        if (!oldList.isNullOrEmpty()) {
-                            oldList.forEach { typeName ->
-                                val key = "${typeName}_NORMAL"
-                                weaponInventory[key] = (weaponInventory[key] ?: 0) + 1
-                            }
-                        } else {
-                            // 기본 지급
-                            weaponInventory["SMG_NORMAL"] = 1
-                        }
-                    }
-
-                    // 3. 장착 정보
-                    val equipChar = document.getString("def_equip_char")
-                    val equipWeapon = document.getString("def_equip_weapon")
-                    val equipGrade = document.getString("def_equip_weapon_grade")
-
-                    equippedDefenseCharacter = try { if(equipChar != null) DefenseCharacterType.valueOf(equipChar) else DefenseCharacterType.HUMAN } catch(e:Exception) { DefenseCharacterType.HUMAN }
-                    equippedDefenseWeapon = try { if(equipWeapon != null) WeaponType.valueOf(equipWeapon) else WeaponType.SMG } catch(e:Exception) { WeaponType.SMG }
-                    equippedDefenseWeaponGrade = try { if(equipGrade != null) WeaponGrade.valueOf(equipGrade) else WeaponGrade.NORMAL } catch(e:Exception) { WeaponGrade.NORMAL }
+                    currentWeaponId = document.getString("weaponId") ?: "w_001"
+                    currentRingId = document.getString("ringId") ?: "r_001"
+                    currentNecklaceId = document.getString("necklaceId") ?: "n_001"
                 } else {
-                    // 신규 유저
-                    ownedDefenseCharacters.add(DefenseCharacterType.HUMAN)
-                    weaponInventory["SMG_NORMAL"] = 1
-                    equippedDefenseCharacter = DefenseCharacterType.HUMAN
-                    equippedDefenseWeapon = WeaponType.SMG
-                    equippedDefenseWeaponGrade = WeaponGrade.NORMAL
+                    // 데이터가 없으면 초기값으로 저장 후 로드한 것으로 간주
+                    saveEquipment(uid, "w_001", "r_001", "n_001") {}
                 }
-
-                // 최소 보장
-                if(ownedDefenseCharacters.isEmpty()) ownedDefenseCharacters.add(DefenseCharacterType.HUMAN)
-                if(weaponInventory.isEmpty()) weaponInventory["SMG_NORMAL"] = 1
-
                 onComplete()
             }
             .addOnFailureListener { onComplete() }
     }
 
-    // [Defense] 장비 저장
-    fun saveDefenseLoadout(uid: String, charType: DefenseCharacterType, weaponType: WeaponType, grade: WeaponGrade) {
-        val data = hashMapOf(
-            "def_equip_char" to charType.name,
-            "def_equip_weapon" to weaponType.name,
-            "def_equip_weapon_grade" to grade.name
-        )
-        db.collection("users").document(uid).set(data, SetOptions.merge())
+    // 총 공격력 배율 계산 (CharacterPopup 스탯 표시용)
+    fun getTotalDamageMultiplier(): Float {
+        var bonus = 0
+        EquipItem.getById(currentWeaponId)?.let { bonus += it.statBonus }
+        EquipItem.getById(currentRingId)?.let { bonus += it.statBonus }
+        EquipItem.getById(currentNecklaceId)?.let { bonus += it.statBonus }
+        return 1.0f + (bonus / 100f)
+    }
 
+
+    // ==================================================================================
+    // [메서드 그룹 2] 디펜스 게임 전용 로직 (DefenseCharacterPopup 연동)
+    // ==================================================================================
+
+    fun loadDefenseInventory(uid: String, onComplete: () -> Unit) {
+        val docRef = db.collection("users").document(uid).collection("defense_inventory").document("data")
+
+        docRef.get().addOnSuccessListener { document ->
+            if (document != null && document.exists()) {
+                // 1. 장착 정보 로드
+                val charStr = document.getString("equippedCharacter")
+                if (charStr != null) {
+                    try {
+                        equippedDefenseCharacter = DefenseCharacterType.valueOf(charStr)
+                    } catch (e: Exception) {
+                        equippedDefenseCharacter = DefenseCharacterType.POTATO
+                    }
+                }
+
+                val weaponStr = document.getString("equippedWeapon")
+                val gradeStr = document.getString("equippedWeaponGrade")
+                if (weaponStr != null && gradeStr != null) {
+                    try {
+                        equippedDefenseWeapon = WeaponType.valueOf(weaponStr)
+                        equippedDefenseWeaponGrade = WeaponGrade.valueOf(gradeStr)
+                    } catch (e: Exception) {
+                        equippedDefenseWeapon = WeaponType.SMG
+                        equippedDefenseWeaponGrade = WeaponGrade.NORMAL
+                    }
+                }
+
+                // 2. 보유 캐릭터 로드
+                val charList = document.get("ownedCharacters") as? List<String>
+                if (charList != null) {
+                    ownedDefenseCharacters.clear()
+                    for (c in charList) {
+                        try {
+                            ownedDefenseCharacters.add(DefenseCharacterType.valueOf(c))
+                        } catch (e: Exception) {}
+                    }
+                }
+                // 기본 캐릭터는 항상 보유
+                ownedDefenseCharacters.add(DefenseCharacterType.POTATO)
+
+                // 3. 보유 무기 로드 [수정: def_weapon_inventory 필드 확인 및 안전한 형변환]
+                // 기존 'ownedWeapons'와 'def_weapon_inventory' 모두 확인하여 병합
+                ownedWeapons.clear()
+
+                val legacyMap = document.get("def_weapon_inventory") as? Map<*, *>
+                if (legacyMap != null) {
+                    for ((k, v) in legacyMap) {
+                        if (k is String) {
+                            val count = when (v) {
+                                is Int -> v
+                                is Long -> v.toInt()
+                                is String -> v.toIntOrNull() ?: 0
+                                else -> 0
+                            }
+                            if (count > 0) {
+                                ownedWeapons[k] = count
+                            }
+                        }
+                    }
+                }
+
+                // ownedWeapons 필드가 있다면 덮어쓰기 (최신 데이터일 가능성이 높음)
+                val currentMap = document.get("ownedWeapons") as? Map<*, *>
+                if (currentMap != null) {
+                    for ((k, v) in currentMap) {
+                        if (k is String) {
+                            val count = when (v) {
+                                is Int -> v
+                                is Long -> v.toInt()
+                                is String -> v.toIntOrNull() ?: 0
+                                else -> 0
+                            }
+                            if (count > 0) {
+                                ownedWeapons[k] = count
+                            }
+                        }
+                    }
+                }
+
+                // 만약 아무것도 없다면 기본 무기 추가
+                if (ownedWeapons.isEmpty()) {
+                    ownedWeapons["SMG_NORMAL"] = 1
+                }
+
+            } else {
+                // 데이터가 없으면 초기값 저장
+                saveDefenseInventory(uid)
+            }
+            // 일반 장비 데이터도 함께 로드 시도 (순차 처리)
+            loadInventory(uid) {
+                onComplete()
+            }
+        }.addOnFailureListener {
+            onComplete()
+        }
+    }
+
+    fun saveDefenseLoadout(uid: String, charType: DefenseCharacterType, weaponType: WeaponType, grade: WeaponGrade) {
         equippedDefenseCharacter = charType
         equippedDefenseWeapon = weaponType
         equippedDefenseWeaponGrade = grade
+
+        saveDefenseInventory(uid)
     }
 
-    // [Defense] 무기 획득 (드롭)
-    fun unlockWeapon(uid: String, weapon: WeaponType, grade: WeaponGrade, onResult: (Boolean) -> Unit) {
-        val userRef = db.collection("users").document(uid)
-        db.runTransaction { transaction ->
-            val snapshot = transaction.get(userRef)
-            val currentMap = snapshot.get("def_weapon_inventory") as? Map<String, Long> ?: mapOf()
-            val mutableMap = currentMap.toMutableMap()
+    // 무기 획득 함수
+    fun unlockWeapon(uid: String, type: WeaponType, grade: WeaponGrade, count: Int = 1, onComplete: ((Boolean) -> Unit)? = null) {
+        val key = "${type.name}_${grade.name}"
+        val currentCount = ownedWeapons[key] ?: 0
+        ownedWeapons[key] = currentCount + count
 
-            val key = "${weapon.name}_${grade.name}"
-            val currentCount = mutableMap[key] ?: 0L
-            mutableMap[key] = currentCount + 1
-
-            transaction.update(userRef, "def_weapon_inventory", mutableMap)
-            true
-        }.addOnSuccessListener {
-            // 메모리 업데이트
-            val key = "${weapon.name}_${grade.name}"
-            weaponInventory[key] = (weaponInventory[key] ?: 0) + 1
-            onResult(true)
-        }.addOnFailureListener { onResult(false) }
+        saveDefenseInventory(uid)
+        onComplete?.invoke(true)
     }
 
-    // [Defense] 무기 합성 (Upgrade)
-    fun upgradeWeapon(uid: String, weapon: WeaponType, currentGrade: WeaponGrade, onResult: (Boolean, String) -> Unit) {
-        val nextGrade = currentGrade.getNextGrade()
-        if (nextGrade == null) {
-            onResult(false, "최고 등급입니다.")
-            return
-        }
-
+    fun upgradeWeapon(uid: String, type: WeaponType, currentGrade: WeaponGrade, callback: (Boolean, String) -> Unit) {
+        val currentKey = "${type.name}_${currentGrade.name}"
+        val count = ownedWeapons[currentKey] ?: 0
         val cost = currentGrade.getUpgradeCost()
-        val currentKey = "${weapon.name}_${currentGrade.name}"
-        val nextKey = "${weapon.name}_${nextGrade.name}"
 
-        // 메모리 체크
-        val currentCount = weaponInventory[currentKey] ?: 0
-        if (currentCount < cost) {
-            onResult(false, "재료가 부족합니다. (${currentCount}/${cost})")
+        if (cost == 0) {
+            callback(false, "최고 등급입니다.")
             return
         }
 
-        // DB 트랜잭션
-        val userRef = db.collection("users").document(uid)
-        db.runTransaction { transaction ->
-            val snapshot = transaction.get(userRef)
-            val currentMap = snapshot.get("def_weapon_inventory") as? Map<String, Long> ?: mapOf()
-            val mutableMap = currentMap.toMutableMap()
-
-            val dbCount = mutableMap[currentKey] ?: 0L
-            if (dbCount < cost) throw Exception("NOT_ENOUGH_MATERIALS")
-
+        if (count >= cost) {
             // 재료 소모
-            mutableMap[currentKey] = dbCount - cost
-            // 결과물 지급
-            val nextCount = mutableMap[nextKey] ?: 0L
-            mutableMap[nextKey] = nextCount + 1
+            ownedWeapons[currentKey] = count - cost
 
-            transaction.update(userRef, "def_weapon_inventory", mutableMap)
-        }.addOnSuccessListener {
-            // 메모리 반영
-            weaponInventory[currentKey] = (weaponInventory[currentKey] ?: 0) - cost
-            weaponInventory[nextKey] = (weaponInventory[nextKey] ?: 0) + 1
-            onResult(true, "${nextGrade.getDisplayName()} 등급으로 승급했습니다!")
-        }.addOnFailureListener { e ->
-            onResult(false, if (e.message == "NOT_ENOUGH_MATERIALS") "재료가 부족합니다." else "오류가 발생했습니다.")
+            // 다음 등급 획득
+            val nextGrade = WeaponGrade.values()[currentGrade.ordinal + 1]
+            val nextKey = "${type.name}_${nextGrade.name}"
+            val nextCount = ownedWeapons[nextKey] ?: 0
+            ownedWeapons[nextKey] = nextCount + 1
+
+            saveDefenseInventory(uid)
+            callback(true, "승급 성공! ${nextGrade.name} ${type.name} 획득")
+        } else {
+            callback(false, "재료가 부족합니다.")
         }
     }
 
-    // 헬퍼: 특정 무기/등급 개수 조회
     fun getWeaponCount(type: WeaponType, grade: WeaponGrade): Int {
-        return weaponInventory["${type.name}_${grade.name}"] ?: 0
+        // [수정] 대소문자 문제 방지를 위해 key를 생성할 때와 동일하게 접근
+        return ownedWeapons["${type.name}_${grade.name}"] ?: 0
     }
 
-    // --- RPG ---
-    fun loadEquipment(uid: String, onComplete: () -> Unit) { /* Existing Code */ }
-    fun saveEquipment(uid: String, weaponId: String, ringId: String, necklaceId: String, onComplete: () -> Unit) { /* Existing Code */ }
-    fun getTotalDamageMultiplier(): Float { return 1.0f } // Simplified for brevity in this response
-    fun getEquippedItemNames(): Triple<String, String, String> { return Triple("","","") }
+    private fun saveDefenseInventory(uid: String) {
+        val data = hashMapOf(
+            "equippedCharacter" to equippedDefenseCharacter.name,
+            "equippedWeapon" to equippedDefenseWeapon.name,
+            "equippedWeaponGrade" to equippedDefenseWeaponGrade.name,
+            "ownedCharacters" to ownedDefenseCharacters.map { it.name }.toList(),
+            // [수정] 호환성을 위해 두 필드 모두에 저장
+            "ownedWeapons" to ownedWeapons,
+            "def_weapon_inventory" to ownedWeapons
+        )
+
+        db.collection("users").document(uid).collection("defense_inventory").document("data")
+            .set(data, SetOptions.merge())
+    }
 }

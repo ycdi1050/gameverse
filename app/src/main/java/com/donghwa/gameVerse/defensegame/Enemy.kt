@@ -9,7 +9,7 @@ class Enemy(
     private val path: List<PointF>,
     var maxHp: Int,
     val defense: Int,
-    private val speed: Float,
+    private val baseSpeed: Float, // [수정] 이름 변경 (speed -> baseSpeed)
     private val stage: Int
 ) : GameObject {
 
@@ -33,8 +33,12 @@ class Enemy(
         }
     }
 
-    override fun update() {
+    // [수정] 배속 반영
+    override fun update(speedMultiplier: Int) {
         if (isDead || reachedEnd || path.isEmpty()) return
+
+        // 배속에 따른 실제 이동 속도 계산
+        val currentSpeed = baseSpeed * speedMultiplier
 
         // 이동 로직
         if (currentPathIndex < path.size - 1) {
@@ -43,22 +47,27 @@ class Enemy(
             val dy = target.y - y
             val dist = Math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
 
-            if (dist <= speed) {
+            if (dist <= currentSpeed) {
                 x = target.x
                 y = target.y
                 currentPathIndex++
                 if (currentPathIndex >= path.size - 1) reachedEnd = true
             } else {
-                x += (dx / dist) * speed
-                y += (dy / dist) * speed
+                x += (dx / dist) * currentSpeed
+                y += (dy / dist) * currentSpeed
             }
         }
 
-        // 도트 데미지 처리
+        // 도트 데미지 처리 (배속 시 더 빨리 틱이 돔)
         if (poisonDuration > 0) {
             val now = System.currentTimeMillis()
-            if (now - lastPoisonTime >= 1000L) { // 1초마다 피해
+            // 기본 1초(1000ms) 간격 -> 배속 시 간격 감소
+            val tickInterval = 1000L / speedMultiplier
+
+            if (now - lastPoisonTime >= tickInterval) {
                 takeDamageNoDefense(poisonDamage)
+                // 지속 시간 감소 로직도 틱 단위로 처리한다고 가정
+                // (정확한 시간 처리를 위해선 복잡해지므로 단순화: 틱 발생 시 1초치 감소)
                 poisonDuration--
                 lastPoisonTime = now
             }
@@ -82,7 +91,6 @@ class Enemy(
         return false
     }
 
-    // 방어력 무시 데미지 (도트 등)
     private fun takeDamageNoDefense(amount: Int) {
         hp -= amount
         if (hp <= 0) isDead = true
@@ -92,7 +100,6 @@ class Enemy(
         if (isDead) return
 
         paint.style = Paint.Style.FILL
-        // 중독 상태면 녹색 섞임
         if (poisonDuration > 0) {
             paint.color = Color.GREEN
         } else {

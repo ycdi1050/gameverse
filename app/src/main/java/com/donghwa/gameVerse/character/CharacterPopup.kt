@@ -44,7 +44,7 @@ class CharacterPopup(
         statsText.setPadding(0, 0, 0, 30)
         layout.addView(statsText)
 
-        // 무기 선택
+        // 무기 선택 (이 부분에서 오류가 발생했었음 -> 이제 해결됨)
         layout.addView(createLabel("무기 (Weapon)"))
         val weaponSpinner = createSpinner(EquipItem.WEAPONS, dataManager.currentWeaponId)
         layout.addView(weaponSpinner)

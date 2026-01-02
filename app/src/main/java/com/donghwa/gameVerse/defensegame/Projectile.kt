@@ -12,8 +12,8 @@ class Projectile(
     var y: Float,
     val originX: Float,
     val originY: Float,
-    var target: Enemy?, // [수정] 타겟 변경 가능하도록 var로 변경
-    var damage: Int,    // [수정] 데미지 감소 적용을 위해 var로 변경
+    var target: Enemy?,
+    var damage: Int,
     val color: Int,
     val weaponType: WeaponType
 ) : GameObject {
@@ -22,30 +22,31 @@ class Projectile(
     var speed = 25f
     private var angle: Double = 0.0
 
-    // [신규] 도탄 시스템 변수
     var ricochetCount = 0
-    val hitTargets = HashSet<Enemy>() // 이미 맞춘 적은 다시 맞추지 않도록 기록
+    val hitTargets = HashSet<Enemy>()
 
     init {
         updateAngle()
     }
 
-    // 타겟이 변경되면 각도 재계산
     fun updateAngle() {
         if (target != null) {
             angle = atan2((target!!.y - y).toDouble(), (target!!.x - x).toDouble())
         }
     }
 
-    override fun update() {
+    // [수정] 배속 반영
+    override fun update(speedMultiplier: Int) {
         if (hasHit) return
 
         if (weaponType == WeaponType.MISSILE && target != null && !target!!.isDead) {
             updateAngle()
         }
 
-        x += (cos(angle) * speed).toFloat()
-        y += (sin(angle) * speed).toFloat()
+        // 배속만큼 이동 거리 증가
+        val currentSpeed = speed * speedMultiplier
+        x += (cos(angle) * currentSpeed).toFloat()
+        y += (sin(angle) * currentSpeed).toFloat()
 
         if (x < -500 || x > 3000 || y < -500 || y > 3000) {
             hasHit = true

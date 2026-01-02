@@ -15,11 +15,16 @@ class DefenseGameState {
     var isOptionSelection = false
     var currentOptions = listOf<DefenseGameOption>()
 
+    var collectedOptions = ArrayList<DefenseGameOption>()
+
     var score = 0
     var lives = 10
     var stage = 1
     var maxUnlockedStage = 1
     var currentPoints = 0
+
+    // 게임 진행 속도 (1배, 2배, 3배)
+    var gameSpeed = 1
 
     var currentWave = 1
     val maxWaves = 10
@@ -33,13 +38,14 @@ class DefenseGameState {
     var buffCritChance = 0.0f
     var buffCritDamage = 1.5f
     var isDoubleShot = false
+    var isMultiShot = false
     var buffRicochetCount = 0
 
     var globalDamageMultiplier = 1.0f
     var upgradeCost = 100
 
     var selectedWeapon: WeaponType = WeaponType.SMG
-    var selectedCharacterType: DefenseCharacterType = DefenseCharacterType.HUMAN
+    var selectedCharacterType: DefenseCharacterType = DefenseCharacterType.POTATO // 기본값 POTATO로 변경
     var selectedWeaponGrade: WeaponGrade = WeaponGrade.NORMAL
 
     var killsInCurrentStage = 0
@@ -59,8 +65,8 @@ class DefenseGameState {
 
     var path = ArrayList<PointF>()
 
-    // [수정] 배치 공간을 촘촘하게 하기 위해 그리드 크기 축소 (400f -> 130f)
-    val gridSize = 130f
+    // [수정] 격자 크기 대폭 확대 (130f -> 200f) - 캐릭터 크기 확보
+    val gridSize = 200f
 
     var rows = 0
     var cols = 0
@@ -84,6 +90,7 @@ class DefenseGameState {
         currentPoints = 100 + (stage * 50)
         globalDamageMultiplier = 1.0f
         upgradeCost = 100
+        gameSpeed = 1
 
         setupWaveDifficulty()
 
@@ -108,11 +115,16 @@ class DefenseGameState {
 
         val difficultyFactor = stage * 2 + currentWave
 
-        enemyHp = 20 + (difficultyFactor * 25) + (currentWave * currentWave * 10)
-        enemyDefense = (stage - 1) * 2 + (currentWave / 2)
+        // 몬스터 체력 설정
+        enemyHp = 10 + (difficultyFactor * 5) + (currentWave * currentWave)
 
-        spawnInterval = (2000 - (stage * 100) - (currentWave * 80)).coerceAtLeast(400).toLong()
-        requiredKills = 5 + (stage * 2) + (currentWave * 2)
+        // 방어력 설정
+        enemyDefense = (stage - 1) + (currentWave / 5)
+
+        // 스폰 간격 조정
+        spawnInterval = (1800 - (stage * 80) - (currentWave * 60)).coerceAtLeast(300).toLong()
+
+        requiredKills = 10 + (stage * 3) + (currentWave * 3)
     }
 
     private fun resetBuffs() {
@@ -124,6 +136,8 @@ class DefenseGameState {
         buffCritChance = 0.0f
         buffCritDamage = 1.5f
         isDoubleShot = false
+        isMultiShot = false
         buffRicochetCount = 0
+        collectedOptions.clear()
     }
 }

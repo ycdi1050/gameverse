@@ -47,37 +47,36 @@ class Character(
 
     private fun updateStats() {
         val bonus = level - 1
-
         when (weaponType) {
             WeaponType.SMG -> {
                 damage = 3 + (bonus * 2)
                 range = 350f
-                fireRate = (150L - (bonus * 10L)).coerceAtLeast(50L)
+                fireRate = (350L - (bonus * 20L)).coerceAtLeast(100L)
             }
             WeaponType.SHOTGUN -> {
                 damage = 15 + (bonus * 5)
                 range = 250f
-                fireRate = 1000L
+                fireRate = 1800L
             }
             WeaponType.SNIPER -> {
                 damage = 40 + (bonus * 15)
                 range = 800f
-                fireRate = 2000L
+                fireRate = 3500L
             }
             WeaponType.MISSILE -> {
                 damage = 10 + (bonus * 5)
                 range = 600f
-                fireRate = 1500L
+                fireRate = 2500L
             }
             WeaponType.BOW -> {
                 damage = 8 + (bonus * 3)
                 range = 400f
-                fireRate = 800L
+                fireRate = 1400L
             }
         }
 
         when (characterType) {
-            DefenseCharacterType.HUMAN -> {}
+            DefenseCharacterType.POTATO -> {}
             DefenseCharacterType.ROBOT -> fireRate = (fireRate * 0.9).toLong()
             DefenseCharacterType.ALIEN -> range *= 1.1f
         }
@@ -86,13 +85,13 @@ class Character(
         damage = (damage * gradeMultiplier).toInt()
     }
 
-    fun autoAttack(enemies: List<Enemy>, currentTime: Long, state: DefenseGameState): Projectile? {
+    fun autoAttack(enemies: List<Enemy>, currentTime: Long, state: DefenseGameState, speedMultiplier: Int): Projectile? {
         if (recoilOffset > 0) {
-            recoilOffset -= recoilRecovery
+            recoilOffset -= (recoilRecovery * speedMultiplier)
             if (recoilOffset < 0) recoilOffset = 0f
         }
 
-        val finalFireRate = (fireRate / state.buffAtkSpeed).toLong()
+        val finalFireRate = (fireRate / state.buffAtkSpeed / speedMultiplier).toLong()
 
         if (currentTime - lastShotTime < finalFireRate) return null
 
@@ -128,7 +127,6 @@ class Character(
             }
 
             val proj = Projectile(x, y, x, y, target, finalDamage, color, weaponType)
-            // [신규] 도탄 횟수 적용
             proj.ricochetCount = state.buffRicochetCount
             return proj
         } else {
@@ -136,50 +134,144 @@ class Character(
         }
     }
 
-    override fun update() {}
+    override fun update(speedMultiplier: Int) {}
 
     override fun draw(canvas: Canvas, paint: Paint) {
-        drawBody(canvas, paint)
-        drawWeapon(canvas, paint)
+        // [수정] Paint 객체 초기화 (이전 그리기 속성 제거)
+        // 비트맵 그릴 때 필터링(부드럽게) 적용
+        paint.isFilterBitmap = true
+        paint.isAntiAlias = true
 
+        if (!drawCharacterWithWeapon(canvas, paint)) {
+            drawBody(canvas, paint)
+            drawWeapon(canvas, paint)
+        }
+
+        // [수정] 텍스트 그리기 전 Paint 속성 확실하게 재설정
+        paint.reset()
+        paint.isAntiAlias = true
         paint.color = Color.WHITE
         paint.textSize = 30f
         paint.textAlign = Paint.Align.CENTER
-        canvas.drawText("Lv.$level", x, y + 60f, paint)
+        // 그림자 효과 제거 (혹시 설정되어 있었다면)
+        paint.clearShadowLayer()
+        paint.style = Paint.Style.FILL
+
+        canvas.drawText("Lv.$level", x, y + 95f, paint)
 
         if (weaponGrade != WeaponGrade.NORMAL) {
             paint.color = weaponGrade.getColor()
-            paint.textSize = 20f
-            canvas.drawText(weaponGrade.name.first().toString(), x, y - 45f, paint)
+            paint.textSize = 24f
+            // 그림자 제거 확인
+            paint.clearShadowLayer()
+            canvas.drawText(weaponGrade.name.first().toString(), x, y - 85f, paint)
         }
+    }
+
+    private fun drawCharacterWithWeapon(canvas: Canvas, paint: Paint): Boolean {
+        val combinedBitmap = ResourceManager.getCombinedBitmap(characterType, weaponType)
+
+        if (combinedBitmap != null) {
+            val matrix = Matrix()
+            matrix.postTranslate(-combinedBitmap.width / 2f, -combinedBitmap.height / 2f)
+
+            val targetSize = 160f
+            val scaleX = targetSize / combinedBitmap.width
+            val scaleY = targetSize / combinedBitmap.height
+            matrix.postScale(scaleX, scaleY)
+
+            val degrees = Math.toDegrees(angle).toFloat()
+
+            matrix.reset()
+            matrix.preTranslate(-combinedBitmap.width / 2f, -combinedBitmap.height / 2f)
+            matrix.postScale(scaleX, scaleY)
+            matrix.postRotate(degrees)
+
+            val recoilX = -(cos(angle).toFloat() * recoilOffset)
+            val recoilY = -(sin(angle).toFloat() * recoilOffset)
+
+            matrix.postTranslate(x + recoilX, y + recoilY)
+
+            canvas.drawBitmap(combinedBitmap, matrix, paint)
+
+            return true
+        }
+        return false
     }
 
     private fun drawBody(canvas: Canvas, paint: Paint) {
-        paint.style = Paint.Style.FILL
-        paint.color = when (characterType) {
-            DefenseCharacterType.HUMAN -> Color.parseColor("#FFCC80")
-            DefenseCharacterType.ROBOT -> Color.parseColor("#B0BEC5")
-            DefenseCharacterType.ALIEN -> Color.parseColor("#A5D6A7")
-        }
-        canvas.drawCircle(x, y, 35f, paint)
+        val bitmap = ResourceManager.getUnitBitmap(characterType)
 
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 3f
-        paint.color = weaponGrade.getColor()
-        canvas.drawCircle(x, y, 35f, paint)
+        if (bitmap != null) {
+            val matrix = Matrix()
+
+            val targetSize = 160f
+            val scaleX = targetSize / bitmap.width
+            val scaleY = targetSize / bitmap.height
+
+            matrix.reset()
+            matrix.preTranslate(-bitmap.width / 2f, -bitmap.height / 2f)
+            matrix.postScale(scaleX, scaleY)
+            matrix.postTranslate(x, y)
+
+            canvas.drawBitmap(bitmap, matrix, paint)
+        } else {
+            paint.style = Paint.Style.FILL
+            paint.color = when (characterType) {
+                DefenseCharacterType.POTATO -> Color.parseColor("#FFCC80")
+                DefenseCharacterType.ROBOT -> Color.parseColor("#B0BEC5")
+                DefenseCharacterType.ALIEN -> Color.parseColor("#A5D6A7")
+            }
+            canvas.drawCircle(x, y, 70f, paint)
+        }
     }
 
     private fun drawWeapon(canvas: Canvas, paint: Paint) {
-        val bitmap = ResourceManager.getCharacterBitmap(weaponType)
+        val bitmap = ResourceManager.getWeaponBitmap(weaponType, weaponGrade)
+
         val degrees = Math.toDegrees(angle).toFloat()
         val recoilX = -(cos(angle).toFloat() * recoilOffset)
         val recoilY = -(sin(angle).toFloat() * recoilOffset)
 
         if (bitmap != null) {
             val matrix = Matrix()
-            matrix.postTranslate(-bitmap.width / 2f, -bitmap.height / 2f)
+
+            var scaleFactor = 1.3f
+            var forwardOffset = 50f
+            var sideOffset = 20f
+
+            when (weaponType) {
+                WeaponType.SMG -> {
+                    scaleFactor = 1.0f
+                    forwardOffset = 55f
+                }
+                WeaponType.SHOTGUN -> {
+                    scaleFactor = 1.4f
+                    forwardOffset = 65f
+                }
+                WeaponType.SNIPER -> {
+                    scaleFactor = 1.6f
+                    forwardOffset = 80f
+                }
+                WeaponType.MISSILE -> {
+                    scaleFactor = 1.4f
+                    forwardOffset = 45f
+                    sideOffset = 30f
+                }
+                WeaponType.BOW -> {
+                    scaleFactor = 1.4f
+                    forwardOffset = 60f
+                }
+            }
+
+            matrix.preTranslate(-bitmap.width / 2f, -bitmap.height / 2f)
+            val baseScale = 100f / bitmap.width
+            val finalScale = baseScale * scaleFactor
+            matrix.postScale(finalScale, finalScale)
+            matrix.postTranslate(forwardOffset, sideOffset)
             matrix.postRotate(degrees)
             matrix.postTranslate(x + recoilX, y + recoilY)
+
             canvas.drawBitmap(bitmap, matrix, paint)
         } else {
             paint.style = Paint.Style.FILL
@@ -188,8 +280,8 @@ class Character(
             canvas.translate(x + recoilX, y + recoilY)
             canvas.rotate(degrees)
 
-            val wLen = 50f
-            val wWidth = if(weaponType == WeaponType.MISSILE) 15f else 8f
+            val wLen = 90f
+            val wWidth = if(weaponType == WeaponType.MISSILE) 30f else 15f
             canvas.drawRect(0f, -wWidth/2, wLen, wWidth/2, paint)
 
             canvas.restore()

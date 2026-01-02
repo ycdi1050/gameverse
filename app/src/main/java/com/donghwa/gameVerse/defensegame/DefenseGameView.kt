@@ -58,10 +58,16 @@ class DefenseGameView(
             val y = event.y
 
             if (!state.isLevelSelection && !state.isWeaponSelection && !state.isGameOver && !state.isStageClear && !state.isPaused && !state.isOptionSelection) {
-                if (x > width - 120 && y < 120) {
+                // 일시정지 버튼 (우측 상단 120px 이내)
+                if (x > width - 80 && y < 120) {
                     pause()
-                } else {
-                    // Upgrade button area check (approximate from renderer)
+                }
+                // [신규] 배속 버튼 (일시정지 버튼 왼쪽)
+                // 대략 width - 200 ~ width - 80 사이
+                else if (x > width - 200 && x < width - 80 && y < 120 && event.action == MotionEvent.ACTION_UP) {
+                    cycleGameSpeed()
+                }
+                else {
                     val btnX = width / 2f
                     val btnY = height - 80f
                     if (x >= btnX - 150 && x <= btnX + 150 &&
@@ -93,6 +99,14 @@ class DefenseGameView(
         return true
     }
 
+    private fun cycleGameSpeed() {
+        state.gameSpeed++
+        if (state.gameSpeed > 3) {
+            state.gameSpeed = 1
+        }
+        invalidate()
+    }
+
     private fun handleLogicTouchEvent(event: MotionEvent): Boolean {
         return logic.handleTouchEvent(event.action, event.x, event.y)
     }
@@ -100,12 +114,13 @@ class DefenseGameView(
     private fun handleOptionSelectionTouch(x: Float, y: Float) {
         val options = state.currentOptions
         val cardW = 400f
-        val cardH = 300f
-        val startY = 500f
+        val cardH = 250f
+        val startY = 450f
+        val gap = 50f
 
         for (i in options.indices) {
             val cardX = width/2f
-            val cardY = startY + i * (cardH + 50f)
+            val cardY = startY + i * (cardH + gap)
 
             if (x >= cardX - cardW/2 && x <= cardX + cardW/2 &&
                 y >= cardY - cardH/2 && y <= cardY + cardH/2) {
@@ -167,7 +182,6 @@ class DefenseGameView(
     private fun handleStageClearTouch(x: Float, y: Float) {
         val centerX = width / 2f
         val centerY = height / 2f
-        // Continue
         if (x >= centerX - 300 && x <= centerX + 300 &&
             y >= centerY + 60 && y <= centerY + 140) {
             if (state.stage < 5) {
@@ -177,7 +191,6 @@ class DefenseGameView(
                 onExit()
             }
         }
-        // Exit
         if (x >= centerX - 300 && x <= centerX + 300 &&
             y >= centerY + 140 && y <= centerY + 220) {
             onExit()
@@ -187,14 +200,18 @@ class DefenseGameView(
     private fun handlePausedTouch(x: Float, y: Float) {
         val centerX = width / 2f
         val centerY = height / 2f
+        val boxH = 900f
+
+        val buttonBaseY = centerY + boxH/2
+
         // Resume
         if (x >= centerX - 300 && x <= centerX + 300 &&
-            y >= centerY + 60 && y <= centerY + 140) {
+            y >= buttonBaseY - 160 && y <= buttonBaseY - 90) {
             resume()
         }
         // Exit
         if (x >= centerX - 300 && x <= centerX + 300 &&
-            y >= centerY + 140 && y <= centerY + 220) {
+            y >= buttonBaseY - 90 && y <= buttonBaseY - 20) {
             onExit()
         }
     }

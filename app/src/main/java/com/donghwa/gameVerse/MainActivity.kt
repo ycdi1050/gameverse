@@ -34,7 +34,7 @@ class MainActivity : Activity() {
     private lateinit var auth: FirebaseAuth
     private lateinit var googleSignInClient: GoogleSignInClient
     private val rankingManager = RankingManager()
-    private val characterDataManager = CharacterDataManager()
+    private val characterDataManager = CharacterDataManager() // 전역 인스턴스 사용
 
     private val RC_SIGN_IN = 9001
     private val WEB_CLIENT_ID = "588562798442-q2f8fsied1mdastv9rrjerahslnqohu6.apps.googleusercontent.com"
@@ -54,8 +54,8 @@ class MainActivity : Activity() {
 
         val currentUser = auth.currentUser
         if (currentUser != null) {
-            Toast.makeText(this, "접속 확인 중...", Toast.LENGTH_SHORT).show()
-            showHomeScreen()
+            Toast.makeText(this, "데이터를 불러오는 중...", Toast.LENGTH_SHORT).show()
+            loadAllDataAndShowHome(currentUser.uid)
         } else {
             showLoginScreen()
         }
@@ -86,45 +86,49 @@ class MainActivity : Activity() {
         googleSignInClient = GoogleSignIn.getClient(this, gso)
     }
 
-    private fun showHomeScreen() {
-        val user = auth.currentUser
-        val uid = user?.uid ?: return
-
+    // [수정] 모든 데이터를 미리 로드한 후 홈 화면 표시
+    private fun loadAllDataAndShowHome(uid: String) {
+        // 1. 랭킹 및 홈 데이터 로드
         rankingManager.loadHomeData(uid) { highScore, runnerHighScore, defenseHighScore, defenseMaxStage, leaderboard, runnerLeaderboard, defenseLeaderboard, level, currentXp, nickname ->
-
             this.myDefenseMaxStage = defenseMaxStage
 
             if (nickname.isNullOrEmpty()) {
                 showNicknameSetupScreen(uid)
             } else {
-                val homeView = HomeView(
-                    this,
-                    uid,
-                    nickname,
-                    highScore,
-                    runnerHighScore,
-                    defenseHighScore,
-                    level,
-                    currentXp,
-                    leaderboard,
-                    runnerLeaderboard,
-                    defenseLeaderboard,
-                    onStartBrickGame = { startBrickGame() },
-                    onStartRunnerGame = { startRunnerGame() },
-                    onStartSimulation = { startSimulation() },
-                    onStartDefenseGame = { charType, weaponType, grade ->
-                        startDefenseGame(charType, weaponType, grade)
-                    },
-                    onLogout = { signOut() }
-                )
-                setContentView(homeView)
+                // 2. 캐릭터/장비 데이터 로드 (일반 + 디펜스)
+                // loadDefenseInventory 내부에서 loadInventory(일반 장비)도 호출하도록 수정했으므로 하나만 호출해도 됨
+                characterDataManager.loadDefenseInventory(uid) {
+                    // 모든 데이터 로드 완료 후 홈 화면 생성
+                    val homeView = HomeView(
+                        this,
+                        uid,
+                        nickname,
+                        highScore,
+                        runnerHighScore,
+                        defenseHighScore,
+                        level,
+                        currentXp,
+                        leaderboard,
+                        runnerLeaderboard,
+                        defenseLeaderboard,
+                        characterDataManager, // [추가] 로드된 데이터 매니저 전달
+                        onStartBrickGame = { startBrickGame() },
+                        onStartRunnerGame = { startRunnerGame() },
+                        onStartSimulation = { startSimulation() },
+                        onStartDefenseGame = { charType, weaponType, grade ->
+                            startDefenseGame(charType, weaponType, grade)
+                        },
+                        onLogout = { signOut() }
+                    )
+                    setContentView(homeView)
+                }
             }
         }
     }
 
     private fun startBrickGame() {
         brickGameView = BrickGameView(this,
-            onExit = { runOnUiThread { brickGameView?.pause(); brickGameView = null; showHomeScreen() } },
+            onExit = { runOnUiThread { brickGameView?.pause(); brickGameView = null; loadAllDataAndShowHome(auth.currentUser!!.uid) } },
             onGameOver = { score -> saveHighScore(score) }
         )
         setContentView(brickGameView)
@@ -133,7 +137,7 @@ class MainActivity : Activity() {
 
     private fun startRunnerGame() {
         runnerGameView = RunnerGameView(this,
-            onExit = { runOnUiThread { runnerGameView?.pause(); runnerGameView = null; showHomeScreen() } },
+            onExit = { runOnUiThread { runnerGameView?.pause(); runnerGameView = null; loadAllDataAndShowHome(auth.currentUser!!.uid) } },
             onGameOver = { score -> saveRunnerHighScore(score) }
         )
         setContentView(runnerGameView)
@@ -141,11 +145,10 @@ class MainActivity : Activity() {
     }
 
     private fun startSimulation() {
-        simulationView = CraneSimulationView(this) { runOnUiThread { simulationView = null; showHomeScreen() } }
+        simulationView = CraneSimulationView(this) { runOnUiThread { simulationView = null; loadAllDataAndShowHome(auth.currentUser!!.uid) } }
         setContentView(simulationView)
     }
 
-    // [수정] DefenseGameView 생성자 변경 사항 반영 (onItemCollected 콜백 추가)
     private fun startDefenseGame(charType: DefenseCharacterType, weaponType: WeaponType, grade: WeaponGrade) {
         defenseGameView = DefenseGameView(
             this,
@@ -153,7 +156,7 @@ class MainActivity : Activity() {
             initialWeapon = weaponType,
             initialCharacter = charType,
             initialGrade = grade,
-            onExit = { runOnUiThread { defenseGameView?.pause(); defenseGameView = null; showHomeScreen() } },
+            onExit = { runOnUiThread { defenseGameView?.pause(); defenseGameView = null; loadAllDataAndShowHome(auth.currentUser!!.uid) } },
             onGameOver = { score, clearedStage -> saveDefenseHighScore(score, clearedStage) },
             // 아이템 획득 콜백
             onItemCollected = { droppedWeapon, droppedGrade ->
@@ -161,9 +164,7 @@ class MainActivity : Activity() {
                 if (user != null) {
                     characterDataManager.unlockWeapon(user.uid, droppedWeapon, droppedGrade) { success ->
                         runOnUiThread {
-                            // 획득 메시지는 너무 자주 뜨면 방해되므로 로그성으로 띄우거나, 중요한 등급만 띄울 수도 있음
-                            // 여기선 간단히 유지
-                            // Toast.makeText(this, "아이템 획득!", Toast.LENGTH_SHORT).show()
+                            // 획득 메시지 처리 (필요시)
                         }
                     }
                 }
@@ -207,7 +208,7 @@ class MainActivity : Activity() {
         btn.text = "확인"
         btn.setOnClickListener {
             val nick = input.text.toString()
-            if(nick.isNotEmpty()) rankingManager.setNickname(uid, nick, { showHomeScreen() }, {})
+            if(nick.isNotEmpty()) rankingManager.setNickname(uid, nick, { loadAllDataAndShowHome(uid) }, {})
         }
         layout.addView(input)
         layout.addView(btn)
@@ -230,7 +231,12 @@ class MainActivity : Activity() {
             try {
                 val account = task.getResult(ApiException::class.java)!!
                 val credential = GoogleAuthProvider.getCredential(account.idToken!!, null)
-                auth.signInWithCredential(credential).addOnCompleteListener { if(it.isSuccessful) showHomeScreen() }
+                auth.signInWithCredential(credential).addOnCompleteListener {
+                    if(it.isSuccessful) {
+                        Toast.makeText(this, "데이터를 불러오는 중...", Toast.LENGTH_SHORT).show()
+                        loadAllDataAndShowHome(auth.currentUser!!.uid)
+                    }
+                }
             } catch (e: ApiException) {}
         }
     }
@@ -241,7 +247,7 @@ class MainActivity : Activity() {
             runnerGameView?.pause(); runnerGameView = null
             defenseGameView?.pause(); defenseGameView = null
             simulationView = null
-            showHomeScreen()
+            loadAllDataAndShowHome(auth.currentUser!!.uid)
         } else {
             super.onBackPressed()
         }

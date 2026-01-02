@@ -14,40 +14,35 @@
       },
       "oauth_client": [
         {
-          "client_id": "588562798442-q2f8fsied1mdastv9rrjerahslnqohu6.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
-      "api_key": [
-        {
-          "current_key": "AIzaSyBACWb_gIlzpPMEV9VLFHQuZTEs8tFs9YE"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "588562798442-q2f8fsied1mdastv9rrjerahslnqohu6.apps.googleusercontent.com",
-              "client_type": 3
-            }
-          ]
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:588562798442:android:f666c3b4e8d1d858927713",
-        "android_client_info": {
-          "package_name": "com.myname.brickrush"
-        }
-      },
-      "oauth_client": [
-        {
-          "client_id": "588562798442-gcjldmb63dbd0aj167t6l8fvc2l69b67.apps.googleusercontent.com",
+          "client_id": "588562798442-73ri440ivu6po8fcrovfhqtmn7skntdj.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.myname.brickrush",
+            "package_name": "com.donghwa.gameVerse",
+            "certificate_hash": "80278b9aa966f446968d08703074491eab764f80"
+          }
+        },
+        {
+          "client_id": "588562798442-e9fv6e7selhfe7ghtafp2r1guo4u37lk.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.donghwa.gameVerse",
+            "certificate_hash": "1f64654c507efb3c5643b9b38cbc0e20730dcc63"
+          }
+        },
+        {
+          "client_id": "588562798442-hc4g90pe18lnmrhko3osopptnjc88u6b.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.donghwa.gameVerse",
             "certificate_hash": "a9fb2a3eb02ead8f22b4be7b38edd34583545d6e"
+          }
+        },
+        {
+          "client_id": "588562798442-uk9nuvoapvsn3vmlbna8t7saik8u579g.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.donghwa.gameVerse",
+            "certificate_hash": "a02f4d36a13acae1b98c8499f46258e94ca07f97"
           }
         },
         {

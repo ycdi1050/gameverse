@@ -2,13 +2,15 @@ package com.donghwa.gameVerse.defensegame
 
 import android.app.AlertDialog
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
-import android.view.ViewGroup
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -22,15 +24,12 @@ class DefenseCharacterPopup(
 ) {
     private val dataManager = CharacterDataManager()
 
-    // 현재 선택된 장착 정보
     private var equippedCharacter: DefenseCharacterType? = null
     private var equippedWeapon: WeaponType? = null
     private var equippedWeaponGrade: WeaponGrade = WeaponGrade.NORMAL
 
-    // 현재 선택된 슬롯 (무엇을 변경하려고 하는지)
     private var currentSelectedSlot: SlotType = SlotType.UNIT
 
-    // 슬롯 타입 정의
     enum class SlotType(val title: String) {
         UNIT("캐릭터"),
         WEAPON("무기"),
@@ -41,15 +40,16 @@ class DefenseCharacterPopup(
         RING("반지")
     }
 
-    // UI 요소
     private lateinit var inventoryGridContainer: LinearLayout
     private lateinit var statusText: TextView
     private lateinit var dialog: AlertDialog
 
-    // 슬롯 버튼 참조 (업데이트용)
-    private var slotButtons = mutableMapOf<SlotType, Button>()
+    private data class SlotViews(val container: View, val icon: ImageView, val label: TextView)
+    private var slotViewsMap = mutableMapOf<SlotType, SlotViews>()
 
     fun show() {
+        ResourceManager.init(context)
+
         Toast.makeText(context, "인벤토리 정보를 불러오는 중...", Toast.LENGTH_SHORT).show()
         dataManager.loadDefenseInventory(uid) {
             showInventoryDialog()
@@ -57,7 +57,6 @@ class DefenseCharacterPopup(
     }
 
     private fun showInventoryDialog() {
-        // 데이터 로드
         equippedCharacter = dataManager.equippedDefenseCharacter
         equippedWeapon = dataManager.equippedDefenseWeapon
         equippedWeaponGrade = dataManager.equippedDefenseWeaponGrade
@@ -67,7 +66,6 @@ class DefenseCharacterPopup(
             setBackgroundColor(Color.parseColor("#121212"))
         }
 
-        // 1. 상단 타이틀
         val titleBar = TextView(context).apply {
             text = " 격납고 (Hangar) "
             textSize = 22f
@@ -79,11 +77,9 @@ class DefenseCharacterPopup(
         }
         mainLayout.addView(titleBar)
 
-        // 2. 캐릭터 중심 장착 슬롯 UI (Paper Doll UI)
         val equipSection = createEquipSection()
         mainLayout.addView(equipSection)
 
-        // 3. 인벤토리 영역 헤더
         val invHeader = TextView(context).apply {
             text = "▼ 보유 아이템 목록 (Inventory)"
             textSize = 14f
@@ -93,7 +89,6 @@ class DefenseCharacterPopup(
         }
         mainLayout.addView(invHeader)
 
-        // 4. 인벤토리 그리드 (ScrollView)
         val scrollView = ScrollView(context).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
@@ -108,27 +103,22 @@ class DefenseCharacterPopup(
         scrollView.addView(inventoryGridContainer)
         mainLayout.addView(scrollView)
 
-        // 5. 하단 상태 및 버튼
         val bottomLayout = createBottomSection()
         mainLayout.addView(bottomLayout)
 
-        // 초기 인벤토리 로드 (캐릭터 탭)
         refreshInventoryGrid()
 
-        // 다이얼로그 생성
         dialog = AlertDialog.Builder(context)
             .setView(mainLayout)
             .create()
 
         dialog.show()
-        // 화면 크기의 95% 사용
         dialog.window?.setLayout(
             (context.resources.displayMetrics.widthPixels * 0.95).toInt(),
             (context.resources.displayMetrics.heightPixels * 0.9).toInt()
         )
     }
 
-    // --- [섹션 2] 캐릭터 중심 장착 UI 생성 ---
     private fun createEquipSection(): View {
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -138,7 +128,6 @@ class DefenseCharacterPopup(
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
 
-        // 왼쪽 컬럼 (투구, 무기, 반지)
         val leftCol = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -147,7 +136,6 @@ class DefenseCharacterPopup(
         leftCol.addView(createSlotButton(SlotType.WEAPON))
         leftCol.addView(createSlotButton(SlotType.RING))
 
-        // 중앙 컬럼 (캐릭터 - 크게)
         val centerCol = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -155,7 +143,6 @@ class DefenseCharacterPopup(
         }
         centerCol.addView(createSlotButton(SlotType.UNIT, isLarge = true))
 
-        // 오른쪽 컬럼 (목걸이, 갑옷, 신발)
         val rightCol = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -171,7 +158,6 @@ class DefenseCharacterPopup(
         return container
     }
 
-    // --- [섹션 5] 하단 버튼 생성 ---
     private fun createBottomSection(): View {
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -231,78 +217,107 @@ class DefenseCharacterPopup(
         return container
     }
 
-    // --- 슬롯 버튼 생성 및 관리 ---
     private fun createSlotButton(type: SlotType, isLarge: Boolean = false): View {
-        val size = if (isLarge) 240 else 160 // 버튼 크기
+        val size = if (isLarge) 240 else 160
 
         val frame = FrameLayout(context).apply {
             layoutParams = LinearLayout.LayoutParams(size, size).apply {
                 setMargins(0, 10, 0, 10)
             }
-        }
-
-        val btn = Button(context).apply {
-            background = null // 기본 배경 제거하고 색상 지정
-            setBackgroundColor(Color.parseColor("#333333")) // 기본 색상
-            text = "${type.title}\n(비어있음)"
-            setTextColor(Color.LTGRAY)
-            textSize = if(isLarge) 16f else 11f
-            gravity = Gravity.CENTER
+            setBackgroundColor(Color.parseColor("#333333"))
             setOnClickListener {
                 selectSlot(type)
             }
         }
 
-        slotButtons[type] = btn
-        frame.addView(btn, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        val imageView = ImageView(context).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                (size * 0.7).toInt(), (size * 0.7).toInt()
+            ).apply {
+                gravity = Gravity.CENTER
+            }
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }
+        frame.addView(imageView)
 
-        // 초기 텍스트 설정
+        val textView = TextView(context).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                bottomMargin = 10
+            }
+            text = type.title
+            setTextColor(Color.LTGRAY)
+            textSize = if(isLarge) 14f else 10f
+            gravity = Gravity.CENTER
+            setShadowLayer(3f, 0f, 0f, Color.BLACK)
+        }
+        frame.addView(textView)
+
+        slotViewsMap[type] = SlotViews(frame, imageView, textView)
         updateSlotButtonUI(type)
 
         return frame
     }
 
     private fun selectSlot(type: SlotType) {
-        // 이전 슬롯 색상 복구
-        slotButtons[currentSelectedSlot]?.setBackgroundColor(Color.parseColor("#333333"))
+        val prevSlot = slotViewsMap[currentSelectedSlot]
+        prevSlot?.container?.setBackgroundColor(Color.parseColor("#333333"))
 
         currentSelectedSlot = type
 
-        // 선택된 슬롯 강조 (노란 테두리 느낌의 밝은 배경)
-        slotButtons[currentSelectedSlot]?.setBackgroundColor(Color.parseColor("#555555")) // 선택됨
+        val currSlot = slotViewsMap[currentSelectedSlot]
+        currSlot?.container?.setBackgroundColor(Color.parseColor("#555555"))
 
-        Toast.makeText(context, "${type.title} 슬롯 선택됨", Toast.LENGTH_SHORT).show()
         refreshInventoryGrid()
     }
 
     private fun updateSlotButtonUI(type: SlotType) {
-        val btn = slotButtons[type] ?: return
+        val views = slotViewsMap[type] ?: return
+
         when (type) {
             SlotType.UNIT -> {
-                btn.text = "${type.title}\n${equippedCharacter?.name ?: "없음"}"
-                btn.setTextColor(Color.CYAN)
+                views.label.text = "${type.title}\n${equippedCharacter?.name ?: "없음"}"
+                views.label.setTextColor(Color.CYAN)
+                // [수정] ResourceManager 사용
+                val bitmap = if (equippedCharacter != null) ResourceManager.getUnitBitmap(equippedCharacter!!) else null
+                if (bitmap != null) {
+                    views.icon.setImageBitmap(bitmap)
+                } else {
+                    views.icon.setImageDrawable(null)
+                }
             }
             SlotType.WEAPON -> {
                 val gradeMark = equippedWeaponGrade.name.first()
-                btn.text = "${type.title}\n${equippedWeapon?.name ?: "없음"}\n[$gradeMark]"
-                btn.setTextColor(equippedWeaponGrade.getColor())
+                views.label.text = "${type.title}\n${equippedWeapon?.name ?: "없음"} [$gradeMark]"
+                views.label.setTextColor(equippedWeaponGrade.getColor())
+
+                if (equippedWeapon != null) {
+                    val bitmap = ResourceManager.getWeaponBitmap(equippedWeapon!!, equippedWeaponGrade)
+                    if (bitmap != null) {
+                        views.icon.setImageBitmap(bitmap)
+                    } else {
+                        views.icon.setImageDrawable(null)
+                    }
+                } else {
+                    views.icon.setImageDrawable(null)
+                }
             }
             else -> {
-                // 아직 구현되지 않은 장비들
-                btn.text = "${type.title}\n(미구현)"
-                btn.setTextColor(Color.GRAY)
+                views.label.text = "${type.title}\n(미구현)"
+                views.label.setTextColor(Color.GRAY)
+                views.icon.setImageDrawable(null)
             }
         }
     }
 
-    // --- 인벤토리 그리드 생성 로직 (4열) ---
     private fun refreshInventoryGrid() {
         inventoryGridContainer.removeAllViews()
 
-        // 화면 너비 기반으로 아이템 크기 계산 (4열)
         val displayMetrics = context.resources.displayMetrics
-        val screenWidth = displayMetrics.widthPixels * 0.9 // 다이얼로그 너비
-        val itemSize = ((screenWidth - 100) / 4).toInt() // 패딩 고려하여 4등분
+        val screenWidth = displayMetrics.widthPixels * 0.9
+        val itemSize = ((screenWidth - 100) / 4).toInt()
 
         when (currentSelectedSlot) {
             SlotType.UNIT -> loadUnitGrid(itemSize)
@@ -330,27 +345,34 @@ class DefenseCharacterPopup(
             val isOwned = dataManager.ownedDefenseCharacters.contains(type)
             val isEquipped = equippedCharacter == type
 
-            val itemView = createGridItemView(itemSize, type.name, "UNIT", Color.WHITE, isOwned, isEquipped) {
+            // [수정] ResourceManager 사용
+            val bitmap = ResourceManager.getUnitBitmap(type)
+
+            val itemView = createGridItemView(
+                size = itemSize,
+                mainText = type.name,
+                subText = "UNIT",
+                textColor = Color.WHITE,
+                borderColor = if(isOwned) Color.CYAN else Color.DKGRAY,
+                isOwned = isOwned,
+                isEquipped = isEquipped,
+                bitmap = bitmap
+            ) {
                 if (isOwned) {
                     equippedCharacter = type
                     updateSlotButtonUI(SlotType.UNIT)
                     updateStatusText()
-                    refreshInventoryGrid() // 갱신해서 장착 표시 이동
+                    refreshInventoryGrid()
                 } else {
                     Toast.makeText(context, "미보유 캐릭터입니다.", Toast.LENGTH_SHORT).show()
                 }
             }
-
             currentRow?.addView(itemView)
         }
-
-        // 마지막 줄 빈 공간 채우기 (레이아웃 깨짐 방지)
         fillEmptySlotsInRow(currentRow, items.size)
     }
 
     private fun loadWeaponGrid(itemSize: Int) {
-        // 보유한 무기 + 등급 조합을 모두 표시
-        // 무기 타입별로 돌면서 등급별 보유량을 체크
         val weaponList = mutableListOf<Triple<WeaponType, WeaponGrade, Int>>()
 
         for (type in WeaponType.values()) {
@@ -383,11 +405,20 @@ class DefenseCharacterPopup(
 
             val (type, grade, count) = item
             val isEquipped = (equippedWeapon == type && equippedWeaponGrade == grade)
-
-            val displayName = "${type.name}\n${grade.name}\nx$count"
             val color = grade.getColor()
 
-            val itemView = createGridItemView(itemSize, displayName, "WEAPON", color, true, isEquipped) {
+            val bitmap = ResourceManager.getWeaponBitmap(type, grade)
+
+            val itemView = createGridItemView(
+                size = itemSize,
+                mainText = "${grade.name}",
+                subText = "x$count",
+                textColor = color,
+                borderColor = color,
+                isOwned = true,
+                isEquipped = isEquipped,
+                bitmap = bitmap
+            ) {
                 equippedWeapon = type
                 equippedWeaponGrade = grade
                 updateSlotButtonUI(SlotType.WEAPON)
@@ -395,18 +426,15 @@ class DefenseCharacterPopup(
                 refreshInventoryGrid()
             }
 
-            // 합성 기능 추가 (롱클릭 시)
             itemView.setOnLongClickListener {
                 tryUpgrade(type, grade)
                 true
             }
-
             currentRow?.addView(itemView)
         }
 
         fillEmptySlotsInRow(currentRow, weaponList.size)
 
-        // 안내 문구 추가
         val hintText = TextView(context).apply {
             text = "Tip: 같은 등급 무기가 모이면 길게 눌러 합성하세요!"
             setTextColor(Color.GRAY)
@@ -448,8 +476,10 @@ class DefenseCharacterPopup(
         mainText: String,
         subText: String,
         textColor: Int,
+        borderColor: Int,
         isOwned: Boolean,
         isEquipped: Boolean,
+        bitmap: Bitmap?,
         onClick: () -> Unit
     ): View {
         val container = FrameLayout(context).apply {
@@ -457,38 +487,65 @@ class DefenseCharacterPopup(
                 marginStart = 5
                 marginEnd = 5
             }
-
-            // 배경 설정
-            if (isEquipped) {
-                setBackgroundColor(Color.parseColor("#1B5E20")) // 장착중 (녹색)
-            } else if (isOwned) {
-                setBackgroundColor(Color.parseColor("#333333")) // 보유중
-            } else {
-                setBackgroundColor(Color.parseColor("#121212")) // 미보유
+            val gd = GradientDrawable().apply {
+                setColor(if (isEquipped) Color.parseColor("#1B5E20") else Color.parseColor("#222222"))
+                setStroke(if (isEquipped) 6 else 2, borderColor)
+                cornerRadius = 15f
             }
-
+            background = gd
             setOnClickListener { onClick() }
         }
 
-        // 내용물
-        val layout = LinearLayout(context).apply {
+        if (bitmap != null && isOwned) {
+            val imageView = ImageView(context).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    (size * 0.7).toInt(), (size * 0.7).toInt()
+                ).apply {
+                    gravity = Gravity.CENTER
+                    bottomMargin = 10
+                }
+                setImageBitmap(bitmap)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+            }
+            container.addView(imageView)
+        } else if (!isOwned) {
+            val lockTv = TextView(context).apply {
+                text = "🔒"
+                textSize = 20f
+                gravity = Gravity.CENTER
+                layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+            }
+            container.addView(lockTv)
+        }
+
+        val infoLayout = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT).apply {
+                bottomMargin = 5
+            }
         }
 
         val title = TextView(context).apply {
-            text = if(isOwned) mainText else "🔒"
-            setTextColor(if(isOwned) textColor else Color.DKGRAY)
-            textSize = 12f
+            text = mainText
+            setTextColor(textColor)
+            textSize = 10f
             gravity = Gravity.CENTER
             typeface = Typeface.DEFAULT_BOLD
+            setShadowLayer(2f, 0f, 0f, Color.BLACK)
         }
 
-        layout.addView(title)
-        container.addView(layout)
+        val sub = TextView(context).apply {
+            text = subText
+            setTextColor(Color.LTGRAY)
+            textSize = 9f
+            gravity = Gravity.CENTER
+        }
 
-        // 장착 표시 뱃지
+        infoLayout.addView(title)
+        infoLayout.addView(sub)
+        container.addView(infoLayout)
+
         if (isEquipped) {
             val badge = TextView(context).apply {
                 text = "E"
