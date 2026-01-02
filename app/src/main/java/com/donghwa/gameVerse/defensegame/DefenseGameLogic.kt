@@ -17,6 +17,7 @@ class DefenseGameLogic(private val state: DefenseGameState) {
 
     private var lastOptionSelectTime: Long = 0
 
+    // ... (generatePath, initGrid 등 기존 메소드 생략 - 변경사항 없음) ...
     fun generatePath(w: Int, h: Int) {
         state.mapWidth = w
         state.mapHeight = h
@@ -24,7 +25,6 @@ class DefenseGameLogic(private val state: DefenseGameState) {
         val gs = state.gridSize
         val leftX = gs * 1.5f
         val rightX = w - gs * 1.5f
-
         state.path.add(PointF(leftX, 0f))
         state.path.add(PointF(leftX, h * 0.2f))
         state.path.add(PointF(rightX, h * 0.2f))
@@ -249,6 +249,7 @@ class DefenseGameLogic(private val state: DefenseGameState) {
         state.setupWaveDifficulty()
     }
 
+    // [확인] 동 코인 수집 로직이 여기에 있어야 함
     private fun updateCollectionPhase(onStageClear: () -> Unit, onGameOver: () -> Unit, onItemCollected: (DropItem) -> Unit) {
         val targetX = state.mapWidth / 2f
         val targetY = state.mapHeight / 2f
@@ -266,7 +267,7 @@ class DefenseGameLogic(private val state: DefenseGameState) {
                 drop.y = targetY
                 collected.add(drop)
 
-                // [수정] 동 수집 처리
+                // [중요] DropType.DONG 처리 확인
                 if (drop.type == DropType.DONG) {
                     state.acquiredDong += drop.amount
                 } else {

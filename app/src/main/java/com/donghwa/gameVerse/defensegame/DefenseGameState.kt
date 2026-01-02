@@ -3,6 +3,12 @@ package com.donghwa.gameVerse.defensegame
 import android.graphics.PointF
 import java.util.concurrent.CopyOnWriteArrayList
 
+// [수정] 난이도 간소화 (Normal, Hard)
+enum class Difficulty(val label: String, val hpMultiplier: Float, val speedMultiplier: Float, val rewardMultiplier: Int) {
+    NORMAL("Normal", 1.0f, 1.0f, 1),  // 기본
+    HARD("Hard", 2.0f, 1.3f, 2)       // 어려움 (보상 2배)
+}
+
 class DefenseGameState {
     var isGameOver = false
     var isRunning = true
@@ -23,14 +29,16 @@ class DefenseGameState {
     var maxUnlockedStage = 1
     var currentPoints = 0
 
-    // [신규] 이번 게임에서 획득한 동
     var acquiredDong = 0
+
+    // 현재 난이도
+    var difficulty: Difficulty = Difficulty.NORMAL
 
     // 게임 진행 속도 (1배, 2배, 3배)
     var gameSpeed = 1
 
     var currentWave = 1
-    val maxWaves = 10
+    val maxWaves = 10 // 총 10단계
 
     // 강화 효과
     var buffAtkSpeed = 1.0f
@@ -89,7 +97,7 @@ class DefenseGameState {
         globalDamageMultiplier = 1.0f
         upgradeCost = 100
         gameSpeed = 1
-        acquiredDong = 0 // 초기화
+        acquiredDong = 0
 
         setupWaveDifficulty()
 
@@ -111,10 +119,17 @@ class DefenseGameState {
     fun setupWaveDifficulty() {
         killsInCurrentStage = 0
         spawnedEnemies = 0
-        val difficultyFactor = stage * 2 + currentWave
-        enemyHp = 10 + (difficultyFactor * 5) + (currentWave * currentWave)
+        val baseDifficulty = stage * 2 + currentWave
+
+        // 난이도별 HP 및 속도 적용
+        val baseHp = 10 + (baseDifficulty * 5) + (currentWave * currentWave)
+        enemyHp = (baseHp * difficulty.hpMultiplier).toInt()
+
         enemyDefense = (stage - 1) + (currentWave / 5)
-        spawnInterval = (1800 - (stage * 80) - (currentWave * 60)).coerceAtLeast(300).toLong()
+
+        val baseInterval = (1800 - (stage * 80) - (currentWave * 60)).coerceAtLeast(300).toLong()
+        spawnInterval = baseInterval
+
         requiredKills = 10 + (stage * 3) + (currentWave * 3)
     }
 

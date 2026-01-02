@@ -3,6 +3,7 @@ package com.donghwa.gameVerse
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -26,6 +27,7 @@ import com.donghwa.gameVerse.defensegame.DefenseGameView
 import com.donghwa.gameVerse.defensegame.WeaponType
 import com.donghwa.gameVerse.defensegame.DefenseCharacterType
 import com.donghwa.gameVerse.defensegame.WeaponGrade
+import com.donghwa.gameVerse.defensegame.Difficulty
 
 class MainActivity : Activity() {
 
@@ -99,6 +101,7 @@ class MainActivity : Activity() {
                         highScore,
                         runnerHighScore,
                         defenseHighScore,
+                        defenseMaxStage,
                         level,
                         currentXp,
                         leaderboard,
@@ -108,8 +111,8 @@ class MainActivity : Activity() {
                         onStartBrickGame = { startBrickGame() },
                         onStartRunnerGame = { startRunnerGame() },
                         onStartSimulation = { startSimulation() },
-                        onStartDefenseGame = { charType, weaponType, grade ->
-                            startDefenseGame(charType, weaponType, grade)
+                        onStartDefenseGame = { charType, weaponType, grade, stage, difficulty ->
+                            startDefenseGame(charType, weaponType, grade, stage, difficulty)
                         },
                         onLogout = { signOut() }
                     )
@@ -142,31 +145,46 @@ class MainActivity : Activity() {
         setContentView(simulationView)
     }
 
-    private fun startDefenseGame(charType: DefenseCharacterType, weaponType: WeaponType, grade: WeaponGrade) {
+    private fun startDefenseGame(charType: DefenseCharacterType, weaponType: WeaponType, grade: WeaponGrade, stage: Int, difficulty: Difficulty) {
         defenseGameView = DefenseGameView(
             this,
             maxUnlockedStage = myDefenseMaxStage,
+            initialStage = stage,
             initialWeapon = weaponType,
             initialCharacter = charType,
             initialGrade = grade,
+            initialDifficulty = difficulty,
             onExit = {
-                // [신규] 게임 종료(나가기) 시 획득한 동 저장
-                val acquiredDong = defenseGameView?.getAcquiredDong() ?: 0
-                if (acquiredDong > 0) {
-                    val user = auth.currentUser
-                    if (user != null) {
-                        characterDataManager.addDong(user.uid, acquiredDong)
+                val view = defenseGameView
+                if (view != null) {
+                    // [수정] consumeAcquiredDong 호출 (읽고 나서 0으로 초기화됨)
+                    val acquiredDong = view.consumeAcquiredDong()
+                    if (acquiredDong > 0) {
+                        val user = auth.currentUser
+                        if (user != null) {
+                            characterDataManager.addDong(user.uid, acquiredDong)
+                        }
                     }
                 }
 
                 runOnUiThread {
-                    defenseGameView?.pause()
-                    defenseGameView = null
-                    loadAllDataAndShowHome(auth.currentUser!!.uid)
+                    try {
+                        if (!isFinishing && !isDestroyed) {
+                            defenseGameView?.pause()
+                            defenseGameView = null
+                            val user = auth.currentUser
+                            if (user != null) {
+                                loadAllDataAndShowHome(user.uid)
+                            } else {
+                                showLoginScreen()
+                            }
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
                 }
             },
             onGameOver = { score, clearedStage ->
-                // 게임 오버/클리어 시 동 저장
                 saveDefenseGameResult(score, clearedStage)
             },
             onItemCollected = { droppedWeapon, droppedGrade ->
@@ -199,15 +217,37 @@ class MainActivity : Activity() {
 
         rankingManager.updateDefenseHighScore(user.uid, user.displayName ?: "Player", score) {}
 
-        if (clearedStage > 0) {
-            rankingManager.updateDefenseMaxStage(user.uid, clearedStage)
-            if (clearedStage + 1 > myDefenseMaxStage) myDefenseMaxStage = clearedStage + 1
+        val view = defenseGameView
+        val currentDifficulty = view?.getDifficulty() ?: Difficulty.NORMAL
+        val maxWave = view?.getCurrentWave() ?: 0
+        // [수정] 클리어 여부와 상관없이 현재 스테이지 번호 가져오기
+        val actualStage = view?.getStage() ?: 0
+
+        // [수정] 실제 플레이한 스테이지가 유효하다면 웨이브 기록 저장
+        if (actualStage > 0) {
+            characterDataManager.recordStageClear(user.uid, actualStage, currentDifficulty, maxWave)
+        }
+
+        // 스테이지 해금 로직 (10웨이브 클리어 시)
+        if (maxWave >= 10 && actualStage > 0) {
+            val msg = "★Stage $actualStage [${currentDifficulty.label}] Cleared!★"
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+
+            if (actualStage == myDefenseMaxStage) {
+                myDefenseMaxStage = actualStage + 1
+                rankingManager.updateDefenseMaxStage(user.uid, actualStage)
+            } else if (actualStage > myDefenseMaxStage) {
+                myDefenseMaxStage = actualStage + 1
+                rankingManager.updateDefenseMaxStage(user.uid, actualStage)
+            }
+        } else {
+            Toast.makeText(this, "Wave $maxWave Reached", Toast.LENGTH_SHORT).show()
         }
 
         rankingManager.addExperience(user.uid, score) { _, _ -> }
 
-        // [신규] 획득한 동 저장
-        val acquiredDong = defenseGameView?.getAcquiredDong() ?: 0
+        // [수정] 동 획득 및 소비 (중복 방지)
+        val acquiredDong = view?.consumeAcquiredDong() ?: 0
         if (acquiredDong > 0) {
             characterDataManager.addDong(user.uid, acquiredDong)
         }
@@ -219,24 +259,78 @@ class MainActivity : Activity() {
     }
 
     private fun showNicknameSetupScreen(uid: String) {
-        val layout = LinearLayout(this)
-        val input = EditText(this)
-        val btn = Button(this)
-        btn.text = "확인"
-        btn.setOnClickListener {
-            val nick = input.text.toString()
-            if(nick.isNotEmpty()) rankingManager.setNickname(uid, nick, { loadAllDataAndShowHome(uid) }, {})
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(50, 50, 50, 50)
+            setBackgroundColor(android.graphics.Color.WHITE)
+        }
+
+        val title = android.widget.TextView(this).apply {
+            text = "Welcome! Enter Nickname"
+            textSize = 24f
+            setTextColor(android.graphics.Color.BLACK)
+            setPadding(0, 0, 0, 50)
+        }
+        layout.addView(title)
+
+        val input = EditText(this).apply {
+            hint = "Nickname"
+            textSize = 18f
+            setTextColor(android.graphics.Color.BLACK)
+            setPadding(20, 20, 20, 20)
+            setBackgroundColor(android.graphics.Color.LTGRAY)
         }
         layout.addView(input)
+
+        val btn = Button(this).apply {
+            text = "Start Game"
+            textSize = 18f
+            setPadding(20, 20, 20, 20)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = 50
+            }
+
+            setOnClickListener {
+                val nick = input.text.toString()
+                if(nick.isNotEmpty()) {
+                    rankingManager.setNickname(uid, nick, {
+                        loadAllDataAndShowHome(uid)
+                    }, {
+                        Toast.makeText(context, "Error saving nickname", Toast.LENGTH_SHORT).show()
+                    })
+                } else {
+                    Toast.makeText(context, "Please enter a nickname", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
         layout.addView(btn)
+
         setContentView(layout)
     }
 
     private fun showLoginScreen() {
-        val layout = LinearLayout(this)
-        val btn = Button(this)
-        btn.text = "Login"
-        btn.setOnClickListener { val intent = googleSignInClient.signInIntent; startActivityForResult(intent, RC_SIGN_IN) }
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setBackgroundColor(android.graphics.Color.parseColor("#121212"))
+        }
+
+        val title = android.widget.TextView(this).apply {
+            text = "GAME VERSE"
+            textSize = 40f
+            setTextColor(android.graphics.Color.CYAN)
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setPadding(0, 0, 0, 100)
+        }
+        layout.addView(title)
+
+        val btn = Button(this).apply {
+            text = "Sign in with Google"
+            textSize = 20f
+            setPadding(50, 30, 50, 30)
+            setOnClickListener { val intent = googleSignInClient.signInIntent; startActivityForResult(intent, RC_SIGN_IN) }
+        }
         layout.addView(btn)
         setContentView(layout)
     }
@@ -252,9 +346,13 @@ class MainActivity : Activity() {
                     if(it.isSuccessful) {
                         Toast.makeText(this, "데이터를 불러오는 중...", Toast.LENGTH_SHORT).show()
                         loadAllDataAndShowHome(auth.currentUser!!.uid)
+                    } else {
+                        Toast.makeText(this, "Authentication Failed.", Toast.LENGTH_SHORT).show()
                     }
                 }
-            } catch (e: ApiException) {}
+            } catch (e: ApiException) {
+                Toast.makeText(this, "Google Sign In Failed", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
