@@ -23,6 +23,9 @@ class DefenseGameState {
     var maxUnlockedStage = 1
     var currentPoints = 0
 
+    // [신규] 이번 게임에서 획득한 동
+    var acquiredDong = 0
+
     // 게임 진행 속도 (1배, 2배, 3배)
     var gameSpeed = 1
 
@@ -45,7 +48,7 @@ class DefenseGameState {
     var upgradeCost = 100
 
     var selectedWeapon: WeaponType = WeaponType.SMG
-    var selectedCharacterType: DefenseCharacterType = DefenseCharacterType.POTATO // 기본값 POTATO로 변경
+    var selectedCharacterType: DefenseCharacterType = DefenseCharacterType.POTATO
     var selectedWeaponGrade: WeaponGrade = WeaponGrade.NORMAL
 
     var killsInCurrentStage = 0
@@ -64,15 +67,10 @@ class DefenseGameState {
     var mapHeight = 0
 
     var path = ArrayList<PointF>()
-
-    // [수정] 격자 크기 대폭 확대 (130f -> 200f) - 캐릭터 크기 확보
     val gridSize = 200f
-
     var rows = 0
     var cols = 0
-
     var gridState: Array<BooleanArray>? = null
-
     var selectedTile: PointF? = null
 
     var lastSpawnTime = 0L
@@ -91,6 +89,7 @@ class DefenseGameState {
         globalDamageMultiplier = 1.0f
         upgradeCost = 100
         gameSpeed = 1
+        acquiredDong = 0 // 초기화
 
         setupWaveDifficulty()
 
@@ -112,18 +111,10 @@ class DefenseGameState {
     fun setupWaveDifficulty() {
         killsInCurrentStage = 0
         spawnedEnemies = 0
-
         val difficultyFactor = stage * 2 + currentWave
-
-        // 몬스터 체력 설정
         enemyHp = 10 + (difficultyFactor * 5) + (currentWave * currentWave)
-
-        // 방어력 설정
         enemyDefense = (stage - 1) + (currentWave / 5)
-
-        // 스폰 간격 조정
         spawnInterval = (1800 - (stage * 80) - (currentWave * 60)).coerceAtLeast(300).toLong()
-
         requiredKills = 10 + (stage * 3) + (currentWave * 3)
     }
 

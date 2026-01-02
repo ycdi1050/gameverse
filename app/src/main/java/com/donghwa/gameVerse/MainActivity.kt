@@ -16,14 +16,12 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
-import java.util.Random
 
 import com.donghwa.gameVerse.brickgame.BrickGameView
 import com.donghwa.gameVerse.runnergame.RunnerGameView
 import com.donghwa.gameVerse.simulation.CraneSimulationView
 import com.donghwa.gameVerse.character.CharacterDataManager
 
-// [중요] DefenseGame 관련 클래스 Import 확인
 import com.donghwa.gameVerse.defensegame.DefenseGameView
 import com.donghwa.gameVerse.defensegame.WeaponType
 import com.donghwa.gameVerse.defensegame.DefenseCharacterType
@@ -34,7 +32,7 @@ class MainActivity : Activity() {
     private lateinit var auth: FirebaseAuth
     private lateinit var googleSignInClient: GoogleSignInClient
     private val rankingManager = RankingManager()
-    private val characterDataManager = CharacterDataManager() // 전역 인스턴스 사용
+    private val characterDataManager = CharacterDataManager()
 
     private val RC_SIGN_IN = 9001
     private val WEB_CLIENT_ID = "588562798442-q2f8fsied1mdastv9rrjerahslnqohu6.apps.googleusercontent.com"
@@ -86,19 +84,14 @@ class MainActivity : Activity() {
         googleSignInClient = GoogleSignIn.getClient(this, gso)
     }
 
-    // [수정] 모든 데이터를 미리 로드한 후 홈 화면 표시
     private fun loadAllDataAndShowHome(uid: String) {
-        // 1. 랭킹 및 홈 데이터 로드
         rankingManager.loadHomeData(uid) { highScore, runnerHighScore, defenseHighScore, defenseMaxStage, leaderboard, runnerLeaderboard, defenseLeaderboard, level, currentXp, nickname ->
             this.myDefenseMaxStage = defenseMaxStage
 
             if (nickname.isNullOrEmpty()) {
                 showNicknameSetupScreen(uid)
             } else {
-                // 2. 캐릭터/장비 데이터 로드 (일반 + 디펜스)
-                // loadDefenseInventory 내부에서 loadInventory(일반 장비)도 호출하도록 수정했으므로 하나만 호출해도 됨
                 characterDataManager.loadDefenseInventory(uid) {
-                    // 모든 데이터 로드 완료 후 홈 화면 생성
                     val homeView = HomeView(
                         this,
                         uid,
@@ -111,7 +104,7 @@ class MainActivity : Activity() {
                         leaderboard,
                         runnerLeaderboard,
                         defenseLeaderboard,
-                        characterDataManager, // [추가] 로드된 데이터 매니저 전달
+                        characterDataManager,
                         onStartBrickGame = { startBrickGame() },
                         onStartRunnerGame = { startRunnerGame() },
                         onStartSimulation = { startSimulation() },
@@ -156,16 +149,31 @@ class MainActivity : Activity() {
             initialWeapon = weaponType,
             initialCharacter = charType,
             initialGrade = grade,
-            onExit = { runOnUiThread { defenseGameView?.pause(); defenseGameView = null; loadAllDataAndShowHome(auth.currentUser!!.uid) } },
-            onGameOver = { score, clearedStage -> saveDefenseHighScore(score, clearedStage) },
-            // 아이템 획득 콜백
+            onExit = {
+                // [신규] 게임 종료(나가기) 시 획득한 동 저장
+                val acquiredDong = defenseGameView?.getAcquiredDong() ?: 0
+                if (acquiredDong > 0) {
+                    val user = auth.currentUser
+                    if (user != null) {
+                        characterDataManager.addDong(user.uid, acquiredDong)
+                    }
+                }
+
+                runOnUiThread {
+                    defenseGameView?.pause()
+                    defenseGameView = null
+                    loadAllDataAndShowHome(auth.currentUser!!.uid)
+                }
+            },
+            onGameOver = { score, clearedStage ->
+                // 게임 오버/클리어 시 동 저장
+                saveDefenseGameResult(score, clearedStage)
+            },
             onItemCollected = { droppedWeapon, droppedGrade ->
                 val user = auth.currentUser
                 if (user != null) {
                     characterDataManager.unlockWeapon(user.uid, droppedWeapon, droppedGrade) { success ->
-                        runOnUiThread {
-                            // 획득 메시지 처리 (필요시)
-                        }
+                        runOnUiThread { }
                     }
                 }
             }
@@ -186,14 +194,23 @@ class MainActivity : Activity() {
         rankingManager.addExperience(user.uid, score) { _, _ -> }
     }
 
-    private fun saveDefenseHighScore(score: Int, clearedStage: Int) {
+    private fun saveDefenseGameResult(score: Int, clearedStage: Int) {
         val user = auth.currentUser ?: return
+
         rankingManager.updateDefenseHighScore(user.uid, user.displayName ?: "Player", score) {}
+
         if (clearedStage > 0) {
             rankingManager.updateDefenseMaxStage(user.uid, clearedStage)
             if (clearedStage + 1 > myDefenseMaxStage) myDefenseMaxStage = clearedStage + 1
         }
+
         rankingManager.addExperience(user.uid, score) { _, _ -> }
+
+        // [신규] 획득한 동 저장
+        val acquiredDong = defenseGameView?.getAcquiredDong() ?: 0
+        if (acquiredDong > 0) {
+            characterDataManager.addDong(user.uid, acquiredDong)
+        }
     }
 
     private fun signOut() {

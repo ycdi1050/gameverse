@@ -22,7 +22,6 @@ class DefenseGameLogic(private val state: DefenseGameState) {
         state.mapHeight = h
         state.path.clear()
         val gs = state.gridSize
-
         val leftX = gs * 1.5f
         val rightX = w - gs * 1.5f
 
@@ -87,21 +86,16 @@ class DefenseGameLogic(private val state: DefenseGameState) {
             return
         }
 
-        if (state.isOptionSelection) {
-            return
-        }
+        if (state.isOptionSelection) return
 
         val now = System.currentTimeMillis()
         val currentSpeed = state.gameSpeed
-
-        // [수정] 스폰 간격에 배속 적용
         val effectiveSpawnInterval = state.spawnInterval / currentSpeed
 
         if (state.spawnedEnemies < state.requiredKills + 5) {
             if (now - state.lastSpawnTime > effectiveSpawnInterval) {
                 var enemySpeed = 1.2f + (state.stage * 0.3f) + (state.currentWave * 0.1f)
                 enemySpeed *= state.buffEnemySpeed
-
                 state.enemies.add(Enemy(state.path, state.enemyHp, state.enemyDefense, enemySpeed, state.stage))
                 state.lastSpawnTime = now
                 state.spawnedEnemies++
@@ -109,20 +103,16 @@ class DefenseGameLogic(private val state: DefenseGameState) {
         } else if (state.enemies.isEmpty() && state.killsInCurrentStage < state.requiredKills) {
             var enemySpeed = 1.2f + (state.stage * 0.3f) + (state.currentWave * 0.1f)
             enemySpeed *= state.buffEnemySpeed
-
             state.enemies.add(Enemy(state.path, state.enemyHp, state.enemyDefense, enemySpeed, state.stage))
             state.lastSpawnTime = now
             state.spawnedEnemies++
         }
 
-        // [수정] 캐릭터 공격 로직에 배속 전달
         for (char in state.characters) {
             val mainProj = char.autoAttack(state.enemies, now, state, currentSpeed)
             if (mainProj != null) {
                 mainProj.speed *= state.buffProjSpeed
-
                 val shotsToFire = ArrayList<Projectile>()
-
                 if (state.isMultiShot) {
                     val target = mainProj.target
                     if (target != null) {
@@ -137,7 +127,6 @@ class DefenseGameLogic(private val state: DefenseGameState) {
                 } else {
                     shotsToFire.add(mainProj)
                 }
-
                 if (state.isDoubleShot) {
                     val doubleShots = ArrayList<Projectile>()
                     for (p in shotsToFire) {
@@ -156,12 +145,10 @@ class DefenseGameLogic(private val state: DefenseGameState) {
                     }
                     shotsToFire.addAll(doubleShots)
                 }
-
                 state.projectiles.addAll(shotsToFire)
             }
         }
 
-        // [수정] 투사체 업데이트에 배속 전달
         val projToRemove = ArrayList<Projectile>()
         for (p in state.projectiles) {
             p.update(currentSpeed)
@@ -182,7 +169,6 @@ class DefenseGameLogic(private val state: DefenseGameState) {
         }
         state.projectiles.removeAll(projToRemove)
 
-        // [수정] 적군 업데이트에 배속 전달
         val enemiesToRemove = ArrayList<Enemy>()
         for (e in state.enemies) {
             e.update(currentSpeed)
@@ -212,16 +198,9 @@ class DefenseGameLogic(private val state: DefenseGameState) {
 
         if (!state.isCollectingItems && !state.isGameOver) {
             if (state.killsInCurrentStage >= state.requiredKills && state.enemies.isEmpty()) {
-                // 난이도 증가 시점(웨이브 종료 시) 아이템 자동 수집 트리거
                 state.isCollectingItems = true
-
-                if (state.currentWave < state.maxWaves) {
-                    // 웨이브 종료 -> 옵션 선택 -> 다음 웨이브
-                    // 수집이 끝난 후 옵션 선택 창으로 이동하도록 로직 변경 필요하지만
-                    // 현재 구조상 updateCollectionPhase 종료 시 분기 처리함
-                } else {
+                if (state.currentWave >= state.maxWaves) {
                     state.isStageClear = true
-                    // 스테이지 클리어 -> 수집 -> 종료
                 }
             }
         }
@@ -232,10 +211,8 @@ class DefenseGameLogic(private val state: DefenseGameState) {
         val perpAngle = angleRad + Math.PI / 2
         val offX = (cos(perpAngle) * offsetDist).toFloat()
         val offY = (sin(perpAngle) * offsetDist).toFloat()
-
         val newX = original.x + offX
         val newY = original.y + offY
-
         val clone = Projectile(newX, newY, original.originX, original.originY, original.target, original.damage, original.color, original.weaponType)
         clone.speed = original.speed
         clone.ricochetCount = original.ricochetCount
@@ -244,30 +221,24 @@ class DefenseGameLogic(private val state: DefenseGameState) {
 
     fun selectOption(option: DefenseGameOption) {
         state.collectedOptions.add(option)
-
         when (option) {
             DefenseGameOption.NORMAL_ATK_UP -> state.buffAtkDamage *= 1.1f
             DefenseGameOption.NORMAL_SPD_UP -> state.buffAtkSpeed *= 1.1f
             DefenseGameOption.NORMAL_RANGE_UP -> state.buffRange *= 1.1f
             DefenseGameOption.NORMAL_HP_UP -> state.lives += 3
-
             DefenseGameOption.MAGIC_ATK_UP -> state.buffAtkDamage *= 1.2f
             DefenseGameOption.MAGIC_SPD_UP -> state.buffAtkSpeed *= 1.2f
             DefenseGameOption.MAGIC_CRIT_UP -> state.buffCritDamage += 0.25f
-
             DefenseGameOption.RARE_ATK_UP -> state.buffAtkDamage *= 1.3f
             DefenseGameOption.RARE_SPD_UP -> state.buffAtkSpeed *= 1.3f
             DefenseGameOption.RARE_CRIT_CHANCE -> state.buffCritChance += 0.1f
-
             DefenseGameOption.UNIQUE_ATK_UP -> state.buffAtkDamage *= 1.4f
             DefenseGameOption.UNIQUE_SPD_UP -> state.buffAtkSpeed *= 1.4f
             DefenseGameOption.UNIQUE_CRIT_DMG -> state.buffCritDamage += 0.5f
-
             DefenseGameOption.LEGEND_MULTI_SHOT -> state.isMultiShot = true
             DefenseGameOption.LEGEND_DOUBLE_SHOT -> state.isDoubleShot = true
             DefenseGameOption.LEGEND_RICOCHET -> state.buffRicochetCount += 3
         }
-
         startNextWave()
         lastOptionSelectTime = System.currentTimeMillis()
     }
@@ -282,7 +253,6 @@ class DefenseGameLogic(private val state: DefenseGameState) {
         val targetX = state.mapWidth / 2f
         val targetY = state.mapHeight / 2f
         val speed = 40f
-
         val collected = ArrayList<DropItem>()
 
         for (drop in state.drops) {
@@ -295,7 +265,13 @@ class DefenseGameLogic(private val state: DefenseGameState) {
                 drop.x = targetX
                 drop.y = targetY
                 collected.add(drop)
-                onItemCollected(drop)
+
+                // [수정] 동 수집 처리
+                if (drop.type == DropType.DONG) {
+                    state.acquiredDong += drop.amount
+                } else {
+                    onItemCollected(drop)
+                }
             } else {
                 val angle = atan2(dy.toDouble(), dx.toDouble())
                 drop.x += (cos(angle) * speed).toFloat()
@@ -306,15 +282,14 @@ class DefenseGameLogic(private val state: DefenseGameState) {
 
         if (state.drops.isEmpty()) {
             state.isCollectingItems = false
-
             if (state.lives <= 0) {
                 state.isGameOver = true
                 state.isRunning = false
                 onGameOver()
-            } else if (state.isStageClear) { // 스테이지 클리어
+            } else if (state.isStageClear) {
                 state.isRunning = false
                 onStageClear()
-            } else { // 웨이브 클리어 후 아이템 수집 완료 시
+            } else {
                 if (state.currentWave < state.maxWaves) {
                     state.isOptionSelection = true
                     state.currentOptions = DefenseGameOption.getRandomOptions(3)
@@ -326,31 +301,21 @@ class DefenseGameLogic(private val state: DefenseGameState) {
     private fun handleProjectileHit(p: Projectile) {
         val hitEnemies = HashSet<Enemy>()
         val splashRadius = if (p.weaponType == WeaponType.SHOTGUN) 150f else 0f
-
-        p.target?.let { target ->
-            if (!target.isDead && !target.reachedEnd) {
-                hitEnemies.add(target)
-            }
-        }
-
+        p.target?.let { target -> if (!target.isDead && !target.reachedEnd) hitEnemies.add(target) }
         for (e in state.enemies) {
             if (e.isDead || e.reachedEnd) continue
             val dx = e.x - p.x
             val dy = e.y - p.y
             val dist = sqrt((dx * dx + dy * dy).toDouble())
-            if (dist < e.radius + 20f || (splashRadius > 0 && dist < splashRadius)) {
-                hitEnemies.add(e)
-            }
+            if (dist < e.radius + 20f || (splashRadius > 0 && dist < splashRadius)) hitEnemies.add(e)
         }
 
         var bounced = false
         if (p.ricochetCount > 0 && hitEnemies.isNotEmpty()) {
             p.hitTargets.addAll(hitEnemies)
-
             var nearestEnemy: Enemy? = null
             var minDist = Float.MAX_VALUE
             val bounceRange = 400f
-
             for (e in state.enemies) {
                 if (e.isDead || e.reachedEnd || p.hitTargets.contains(e)) continue
                 val dist = sqrt(((e.x - p.x) * (e.x - p.x) + (e.y - p.y) * (e.y - p.y)).toDouble()).toFloat()
@@ -359,11 +324,9 @@ class DefenseGameLogic(private val state: DefenseGameState) {
                     nearestEnemy = e
                 }
             }
-
             if (nearestEnemy != null) {
                 p.ricochetCount--
                 p.damage = (p.damage * 0.7f).toInt()
-
                 p.target = nearestEnemy
                 p.updateAngle()
                 p.hasHit = false
@@ -377,20 +340,14 @@ class DefenseGameLogic(private val state: DefenseGameState) {
                 val travelDist = sqrt(((p.x - p.originX) * (p.x - p.originX) + (p.y - p.originY) * (p.y - p.originY)).toDouble()).toFloat()
                 dmg += (travelDist / 20).toInt()
             }
-            if (p.weaponType == WeaponType.BOW) {
-                e.applyPoison(damage = 5, durationSeconds = 5)
-            }
-
+            if (p.weaponType == WeaponType.BOW) e.applyPoison(damage = 5, durationSeconds = 5)
             if (e.takeDamage(dmg)) {
                 state.score += 10
                 state.currentPoints += 10 + state.stage
                 state.killsInCurrentStage++
             }
         }
-
-        if (bounced) {
-            p.hasHit = false
-        }
+        if (bounced) p.hasHit = false
     }
 
     fun upgradeDamage(): Boolean {
@@ -405,7 +362,6 @@ class DefenseGameLogic(private val state: DefenseGameState) {
 
     fun handleTouchEvent(action: Int, x: Float, y: Float): Boolean {
         if (state.isCollectingItems || state.isOptionSelection) return false
-
         if (System.currentTimeMillis() - lastOptionSelectTime < 500) return false
 
         val col = (x / state.gridSize).toInt()
@@ -418,7 +374,6 @@ class DefenseGameLogic(private val state: DefenseGameState) {
                     val centerX = col * state.gridSize + state.gridSize / 2
                     val centerY = row * state.gridSize + state.gridSize / 2
                     val clickedChar = state.characters.find { Math.abs(it.x - centerX) < 10 && Math.abs(it.y - centerY) < 10 }
-
                     if (clickedChar != null) {
                         state.draggingCharacter = clickedChar
                         state.dragStartPos = PointF(clickedChar.x, clickedChar.y)
@@ -428,10 +383,7 @@ class DefenseGameLogic(private val state: DefenseGameState) {
                 }
             }
             MotionEvent.ACTION_MOVE -> {
-                state.draggingCharacter?.let {
-                    it.setPosition(x, y)
-                    return true
-                }
+                state.draggingCharacter?.let { it.setPosition(x, y); return true }
             }
             MotionEvent.ACTION_UP -> {
                 if (state.draggingCharacter != null) {
@@ -440,12 +392,8 @@ class DefenseGameLogic(private val state: DefenseGameState) {
                         val centerX = col * state.gridSize + state.gridSize / 2
                         val centerY = row * state.gridSize + state.gridSize / 2
                         val targetChar = state.characters.find { it != char && Math.abs(it.x - centerX) < 10 && Math.abs(it.y - centerY) < 10 }
-
                         if (targetChar != null) {
-                            if (targetChar.level == char.level &&
-                                targetChar.weaponType == char.weaponType &&
-                                targetChar.characterType == char.characterType &&
-                                targetChar.weaponGrade == char.weaponGrade) {
+                            if (targetChar.level == char.level && targetChar.weaponType == char.weaponType && targetChar.characterType == char.characterType && targetChar.weaponGrade == char.weaponGrade) {
                                 targetChar.upgrade()
                                 state.characters.remove(char)
                                 state.selectedTile = null
@@ -467,7 +415,6 @@ class DefenseGameLogic(private val state: DefenseGameState) {
                         val centerX = col * state.gridSize + state.gridSize / 2
                         val centerY = row * state.gridSize + state.gridSize / 2
                         val existing = state.characters.find { Math.abs(it.x - centerX) < 10 && Math.abs(it.y - centerY) < 10 }
-
                         if (existing == null) {
                             val buildCost = 50
                             if (state.currentPoints >= buildCost) {

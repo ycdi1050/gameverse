@@ -28,6 +28,11 @@ class DefenseGameView(
         ResourceManager.init(context)
     }
 
+    // [신규] 외부에서 획득한 동을 확인할 수 있는 메서드 (MainActivity 오류 해결)
+    fun getAcquiredDong(): Int {
+        return state.acquiredDong
+    }
+
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         logic.initGrid(w, h)
@@ -43,9 +48,12 @@ class DefenseGameView(
 
             logic.update(
                 onStageClear = { invalidate() },
-                onGameOver = { invalidate(); onGameOver(state.score, 0) },
+                onGameOver = {
+                    invalidate()
+                    onGameOver(state.score, 0)
+                },
                 onItemCollected = { drop ->
-                    onItemCollected(drop.weaponType, drop.weaponGrade)
+                    onItemCollected(drop.weaponType!!, drop.weaponGrade)
                 }
             )
             invalidate()
@@ -58,12 +66,9 @@ class DefenseGameView(
             val y = event.y
 
             if (!state.isLevelSelection && !state.isWeaponSelection && !state.isGameOver && !state.isStageClear && !state.isPaused && !state.isOptionSelection) {
-                // 일시정지 버튼 (우측 상단 120px 이내)
                 if (x > width - 80 && y < 120) {
                     pause()
                 }
-                // [신규] 배속 버튼 (일시정지 버튼 왼쪽)
-                // 대략 width - 200 ~ width - 80 사이
                 else if (x > width - 200 && x < width - 80 && y < 120 && event.action == MotionEvent.ACTION_UP) {
                     cycleGameSpeed()
                 }
@@ -101,128 +106,60 @@ class DefenseGameView(
 
     private fun cycleGameSpeed() {
         state.gameSpeed++
-        if (state.gameSpeed > 3) {
-            state.gameSpeed = 1
-        }
+        if (state.gameSpeed > 3) state.gameSpeed = 1
         invalidate()
     }
-
-    private fun handleLogicTouchEvent(event: MotionEvent): Boolean {
-        return logic.handleTouchEvent(event.action, event.x, event.y)
-    }
-
+    private fun handleLogicTouchEvent(event: MotionEvent): Boolean = logic.handleTouchEvent(event.action, event.x, event.y)
     private fun handleOptionSelectionTouch(x: Float, y: Float) {
         val options = state.currentOptions
-        val cardW = 400f
-        val cardH = 250f
-        val startY = 450f
-        val gap = 50f
-
+        val cardW = 400f; val cardH = 250f; val startY = 450f; val gap = 50f
         for (i in options.indices) {
-            val cardX = width/2f
-            val cardY = startY + i * (cardH + gap)
-
-            if (x >= cardX - cardW/2 && x <= cardX + cardW/2 &&
-                y >= cardY - cardH/2 && y <= cardY + cardH/2) {
-                logic.selectOption(options[i])
-                invalidate()
-                return
+            val cardX = width/2f; val cardY = startY + i * (cardH + gap)
+            if (x >= cardX - cardW/2 && x <= cardX + cardW/2 && y >= cardY - cardH/2 && y <= cardY + cardH/2) {
+                logic.selectOption(options[i]); invalidate(); return
             }
         }
     }
-
     private fun handleLevelSelectionTouch(x: Float, y: Float) {
         val startY = 400f
         for (i in 1..5) {
             val btnY = startY + (i - 1) * 180f
-            if (x >= width / 2f - 200 && x <= width / 2f + 200 &&
-                y >= btnY - 60 && y <= btnY + 60) {
+            if (x >= width / 2f - 200 && x <= width / 2f + 200 && y >= btnY - 60 && y <= btnY + 60) {
                 if (i <= state.maxUnlockedStage) {
-                    state.stage = i
-                    state.isLevelSelection = false
-                    state.isWeaponSelection = false
-                    state.resetForStage(state.stage)
-                    invalidate()
+                    state.stage = i; state.isLevelSelection = false; state.isWeaponSelection = false
+                    state.resetForStage(state.stage); invalidate()
                 }
             }
         }
-        val lastBtnY = startY + 4 * 180f
-        val homeY = lastBtnY + 250f
-        if (x >= width / 2f - 150 && x <= width / 2f + 150 &&
-            y >= homeY - 50 && y <= homeY + 50) {
-            onExit()
-        }
+        val lastBtnY = startY + 4 * 180f; val homeY = lastBtnY + 250f
+        if (x >= width / 2f - 150 && x <= width / 2f + 150 && y >= homeY - 50 && y <= homeY + 50) onExit()
     }
-
     private fun handleWeaponSelectionTouch(x: Float, y: Float) {
-        val weapons = WeaponType.values()
-        val startY = 400f
+        val weapons = WeaponType.values(); val startY = 400f
         for ((i, weapon) in weapons.withIndex()) {
             val btnY = startY + i * 150f
-            if (x >= width / 2f - 250 && x <= width / 2f + 250 &&
-                y >= btnY - 50 && y <= btnY + 50) {
-                state.selectedWeapon = weapon
-                state.isWeaponSelection = false
-                state.resetForStage(state.stage)
-                invalidate()
-                return
+            if (x >= width / 2f - 250 && x <= width / 2f + 250 && y >= btnY - 50 && y <= btnY + 50) {
+                state.selectedWeapon = weapon; state.isWeaponSelection = false
+                state.resetForStage(state.stage); invalidate(); return
             }
         }
     }
-
     private fun handleGameOverTouch(x: Float, y: Float) {
-        val centerX = width / 2f
-        val centerY = height / 2f
-        if (x >= centerX - 300 && x <= centerX + 300 &&
-            y >= centerY + 60 && y <= centerY + 140) {
-            onExit()
-        }
+        val centerX = width / 2f; val centerY = height / 2f
+        if (x >= centerX - 300 && x <= centerX + 300 && y >= centerY + 60 && y <= centerY + 140) onExit()
     }
-
     private fun handleStageClearTouch(x: Float, y: Float) {
-        val centerX = width / 2f
-        val centerY = height / 2f
-        if (x >= centerX - 300 && x <= centerX + 300 &&
-            y >= centerY + 60 && y <= centerY + 140) {
-            if (state.stage < 5) {
-                state.resetForStage(state.stage + 1)
-                invalidate()
-            } else {
-                onExit()
-            }
+        val centerX = width / 2f; val centerY = height / 2f
+        if (x >= centerX - 300 && x <= centerX + 300 && y >= centerY + 60 && y <= centerY + 140) {
+            if (state.stage < 5) { state.resetForStage(state.stage + 1); invalidate() } else onExit()
         }
-        if (x >= centerX - 300 && x <= centerX + 300 &&
-            y >= centerY + 140 && y <= centerY + 220) {
-            onExit()
-        }
+        if (x >= centerX - 300 && x <= centerX + 300 && y >= centerY + 140 && y <= centerY + 220) onExit()
     }
-
     private fun handlePausedTouch(x: Float, y: Float) {
-        val centerX = width / 2f
-        val centerY = height / 2f
-        val boxH = 900f
-
-        val buttonBaseY = centerY + boxH/2
-
-        // Resume
-        if (x >= centerX - 300 && x <= centerX + 300 &&
-            y >= buttonBaseY - 160 && y <= buttonBaseY - 90) {
-            resume()
-        }
-        // Exit
-        if (x >= centerX - 300 && x <= centerX + 300 &&
-            y >= buttonBaseY - 90 && y <= buttonBaseY - 20) {
-            onExit()
-        }
+        val centerX = width / 2f; val centerY = height / 2f; val boxH = 900f; val buttonBaseY = centerY + boxH/2
+        if (x >= centerX - 300 && x <= centerX + 300 && y >= buttonBaseY - 160 && y <= buttonBaseY - 90) resume()
+        if (x >= centerX - 300 && x <= centerX + 300 && y >= buttonBaseY - 90 && y <= buttonBaseY - 20) onExit()
     }
-
-    fun pause() {
-        state.isPaused = true
-        invalidate()
-    }
-
-    fun resume() {
-        state.isPaused = false
-        invalidate()
-    }
+    fun pause() { state.isPaused = true; invalidate() }
+    fun resume() { state.isPaused = false; invalidate() }
 }

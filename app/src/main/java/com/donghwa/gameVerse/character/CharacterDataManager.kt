@@ -6,9 +6,11 @@ import com.donghwa.gameVerse.defensegame.WeaponType
 import com.donghwa.gameVerse.item.EquipItem
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import java.util.Random
 
 class CharacterDataManager {
     private val db = FirebaseFirestore.getInstance()
+    private val random = Random()
 
     // --- [섹션 1] 일반 RPG 캐릭터 장비 (CharacterPopup용) ---
     var currentWeaponId: String = "w_001"
@@ -27,6 +29,9 @@ class CharacterDataManager {
     // 보유한 무기 목록 (타입, 등급) -> 개수
     // 키: "TYPE_GRADE" (예: "SMG_NORMAL"), 값: 개수
     val ownedWeapons = HashMap<String, Int>()
+
+    // [신규] 화폐 (동)
+    var userDong: Int = 0
 
     init {
         // 테스트용 초기 데이터
@@ -126,28 +131,8 @@ class CharacterDataManager {
                 // 기본 캐릭터는 항상 보유
                 ownedDefenseCharacters.add(DefenseCharacterType.POTATO)
 
-                // 3. 보유 무기 로드 [수정: def_weapon_inventory 필드 확인 및 안전한 형변환]
-                // 기존 'ownedWeapons'와 'def_weapon_inventory' 모두 확인하여 병합
+                // 3. 보유 무기 로드
                 ownedWeapons.clear()
-
-                val legacyMap = document.get("def_weapon_inventory") as? Map<*, *>
-                if (legacyMap != null) {
-                    for ((k, v) in legacyMap) {
-                        if (k is String) {
-                            val count = when (v) {
-                                is Int -> v
-                                is Long -> v.toInt()
-                                is String -> v.toIntOrNull() ?: 0
-                                else -> 0
-                            }
-                            if (count > 0) {
-                                ownedWeapons[k] = count
-                            }
-                        }
-                    }
-                }
-
-                // ownedWeapons 필드가 있다면 덮어쓰기 (최신 데이터일 가능성이 높음)
                 val currentMap = document.get("ownedWeapons") as? Map<*, *>
                 if (currentMap != null) {
                     for ((k, v) in currentMap) {
@@ -165,10 +150,12 @@ class CharacterDataManager {
                     }
                 }
 
-                // 만약 아무것도 없다면 기본 무기 추가
                 if (ownedWeapons.isEmpty()) {
                     ownedWeapons["SMG_NORMAL"] = 1
                 }
+
+                // 4. [신규] 화폐(동) 로드
+                userDong = document.getLong("userDong")?.toInt() ?: 0
 
             } else {
                 // 데이터가 없으면 초기값 저장
@@ -201,6 +188,43 @@ class CharacterDataManager {
         onComplete?.invoke(true)
     }
 
+    // [신규] 동 획득 함수 (MainActivity에서 호출)
+    fun addDong(uid: String, amount: Int, onComplete: (() -> Unit)? = null) {
+        userDong += amount
+        saveDefenseInventory(uid)
+        onComplete?.invoke()
+    }
+
+    // [신규] 뽑기 로직
+    fun drawGachaWeapon(uid: String, cost: Int, callback: (Boolean, String, WeaponType?, WeaponGrade?) -> Unit) {
+        if (userDong < cost) {
+            callback(false, "동이 부족합니다.", null, null)
+            return
+        }
+
+        // 동 차감
+        userDong -= cost
+
+        // 확률 계산 (노말 > 매직 > 레어 > 유니크 > 레전드)
+        val rand = random.nextFloat() // 0.0 ~ 1.0
+        val grade = when {
+            rand < 0.005f -> WeaponGrade.LEGEND  // 0.5% (매우 희박)
+            rand < 0.03f  -> WeaponGrade.UNIQUE  // 2.5%
+            rand < 0.10f  -> WeaponGrade.RARE    // 7%
+            rand < 0.35f  -> WeaponGrade.MAGIC   // 25%
+            else          -> WeaponGrade.NORMAL  // 65%
+        }
+
+        // 무기 타입 랜덤
+        val types = WeaponType.values()
+        val type = types[random.nextInt(types.size)]
+
+        // 인벤토리에 추가
+        unlockWeapon(uid, type, grade, 1) {
+            callback(true, "획득! ${grade.name} ${type.name}", type, grade)
+        }
+    }
+
     fun upgradeWeapon(uid: String, type: WeaponType, currentGrade: WeaponGrade, callback: (Boolean, String) -> Unit) {
         val currentKey = "${type.name}_${currentGrade.name}"
         val count = ownedWeapons[currentKey] ?: 0
@@ -229,7 +253,6 @@ class CharacterDataManager {
     }
 
     fun getWeaponCount(type: WeaponType, grade: WeaponGrade): Int {
-        // [수정] 대소문자 문제 방지를 위해 key를 생성할 때와 동일하게 접근
         return ownedWeapons["${type.name}_${grade.name}"] ?: 0
     }
 
@@ -239,9 +262,8 @@ class CharacterDataManager {
             "equippedWeapon" to equippedDefenseWeapon.name,
             "equippedWeaponGrade" to equippedDefenseWeaponGrade.name,
             "ownedCharacters" to ownedDefenseCharacters.map { it.name }.toList(),
-            // [수정] 호환성을 위해 두 필드 모두에 저장
             "ownedWeapons" to ownedWeapons,
-            "def_weapon_inventory" to ownedWeapons
+            "userDong" to userDong // [신규] 저장
         )
 
         db.collection("users").document(uid).collection("defense_inventory").document("data")

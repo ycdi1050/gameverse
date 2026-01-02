@@ -74,63 +74,66 @@ class DefenseGameRenderer(private val state: DefenseGameState) {
 
     private fun drawDrops(canvas: Canvas) {
         for (drop in state.drops) {
-            // [수정] 무기 비트맵(PNG) 가져오기 시도
-            val bitmap = ResourceManager.getWeaponBitmap(drop.weaponType, drop.weaponGrade)
-
-            if (bitmap != null) {
-                // 이미지가 있을 경우: 등급 색상의 빛나는 효과 + 아이콘
-                val size = 80f // 아이콘 크기
-
-                // 배경 글로우 (등급 색상)
-                paint.style = Paint.Style.FILL
-                paint.color = drop.weaponGrade.getColor()
-                paint.alpha = 80 // 반투명
-                canvas.drawCircle(drop.x, drop.y, size / 2 + 15, paint)
-                paint.alpha = 255
-
-                // 테두리
-                paint.style = Paint.Style.STROKE
-                paint.strokeWidth = 3f
-                paint.color = drop.weaponGrade.getColor()
-                canvas.drawCircle(drop.x, drop.y, size / 2 + 15, paint)
-                paint.style = Paint.Style.FILL
-
-                // 아이콘 그리기
-                val destRect = RectF(
-                    drop.x - size / 2,
-                    drop.y - size / 2,
-                    drop.x + size / 2,
-                    drop.y + size / 2
-                )
-                // 비트맵 필터링으로 부드럽게
-                paint.isFilterBitmap = true
-                canvas.drawBitmap(bitmap, null, destRect, paint)
-                paint.isFilterBitmap = false
-
-            } else {
-                // 이미지가 없을 경우: 기존 도형 방식 사용 (Fallback)
+            if (drop.type == DropType.DONG) {
+                // [신규] 동(화폐) 그리기
                 val size = 40f
                 paint.style = Paint.Style.FILL
-                paint.color = drop.weaponGrade.getColor()
-                paint.alpha = 100
-                canvas.drawCircle(drop.x, drop.y, size + 10, paint)
+                // 동전 색상 (구리색 느낌)
+                paint.color = Color.parseColor("#CD7F32")
+                canvas.drawCircle(drop.x, drop.y, size/2, paint)
 
-                paint.alpha = 255
-                paint.color = Color.parseColor("#FFD700")
-                canvas.drawRect(drop.x - size/2, drop.y - size/2, drop.x + size/2, drop.y + size/2, paint)
+                paint.style = Paint.Style.STROKE
+                paint.color = Color.parseColor("#FFD700") // 금색 테두리
+                paint.strokeWidth = 3f
+                canvas.drawCircle(drop.x, drop.y, size/2, paint)
 
-                paint.color = Color.RED
-                canvas.drawRect(drop.x - 5, drop.y - size/2, drop.x + 5, drop.y + size/2, paint)
-                canvas.drawRect(drop.x - size/2, drop.y - 5, drop.x + size/2, drop.y + 5, paint)
-
-                paint.color = Color.BLACK
-                paint.textSize = 25f
+                paint.style = Paint.Style.FILL
+                paint.color = Color.WHITE
+                paint.textSize = 20f
                 paint.textAlign = Paint.Align.CENTER
-                val initial = drop.weaponType.name.first().toString()
-                canvas.drawText(initial, drop.x, drop.y - size/2 - 10, paint)
-            }
+                paint.isFakeBoldText = true
+                canvas.drawText("동", drop.x, drop.y + 8, paint)
 
-            // 아이템이 사라지지 않으므로 남은 시간 표시 로직 제거됨
+            } else {
+                // 무기 그리기 (기존 로직)
+                val bitmap = if (drop.weaponType != null) ResourceManager.getWeaponBitmap(drop.weaponType, drop.weaponGrade) else null
+
+                if (bitmap != null) {
+                    val size = 80f
+                    paint.style = Paint.Style.FILL
+                    paint.color = drop.weaponGrade.getColor()
+                    paint.alpha = 80
+                    canvas.drawCircle(drop.x, drop.y, size / 2 + 15, paint)
+                    paint.alpha = 255
+
+                    paint.style = Paint.Style.STROKE
+                    paint.strokeWidth = 3f
+                    paint.color = drop.weaponGrade.getColor()
+                    canvas.drawCircle(drop.x, drop.y, size / 2 + 15, paint)
+                    paint.style = Paint.Style.FILL
+
+                    val destRect = RectF(drop.x - size / 2, drop.y - size / 2, drop.x + size / 2, drop.y + size / 2)
+                    paint.isFilterBitmap = true
+                    canvas.drawBitmap(bitmap, null, destRect, paint)
+                    paint.isFilterBitmap = false
+                } else {
+                    val size = 40f
+                    paint.style = Paint.Style.FILL
+                    paint.color = drop.weaponGrade.getColor()
+                    paint.alpha = 100
+                    canvas.drawCircle(drop.x, drop.y, size + 10, paint)
+
+                    paint.alpha = 255
+                    paint.color = Color.parseColor("#FFD700")
+                    canvas.drawRect(drop.x - size/2, drop.y - size/2, drop.x + size/2, drop.y + size/2, paint)
+
+                    paint.color = Color.BLACK
+                    paint.textSize = 25f
+                    paint.textAlign = Paint.Align.CENTER
+                    val initial = drop.weaponType?.name?.first()?.toString() ?: "?"
+                    canvas.drawText(initial, drop.x, drop.y - size/2 - 10, paint)
+                }
+            }
         }
     }
 
@@ -147,14 +150,14 @@ class DefenseGameRenderer(private val state: DefenseGameState) {
         canvas.drawText("Score: ${state.score}", 30f, 210f, paint)
         canvas.drawText("Points: ${state.currentPoints}", 30f, 260f, paint)
 
-        // --- 상단 버튼 UI (이미지 사용) ---
-        // 1. 일시정지 버튼 (우측 상단 끝)
-        // 버튼 영역: (w - 80) ~ w, 높이 0 ~ 80 정도 가정 (터치 영역 고려)
+        // [신규] 획득 동 표시
+        paint.color = Color.parseColor("#FFD700")
+        canvas.drawText("Dong: +${state.acquiredDong}", 30f, 310f, paint)
+
+        // 일시정지, 배속 버튼 UI...
         val pauseBtnSize = 80
         val pauseBtnX = w - pauseBtnSize - 20
         val pauseBtnY = 20
-
-        // 현재 상태에 따라 이미지 키 선택 (일시정지 상태면 '재생' 버튼 표시, 실행 중이면 '일시정지' 버튼 표시)
         val pauseKey = if(state.isPaused) "ui_play" else "ui_pause"
         val pauseBitmap = ResourceManager.getUIBitmap(pauseKey)
 
@@ -162,17 +165,15 @@ class DefenseGameRenderer(private val state: DefenseGameState) {
             val destRect = Rect(pauseBtnX, pauseBtnY, pauseBtnX + pauseBtnSize, pauseBtnY + pauseBtnSize)
             canvas.drawBitmap(pauseBitmap, null, destRect, paint)
         } else {
-            // 이미지 없을 시 텍스트 폴백
+            paint.color = Color.WHITE
             paint.textSize = 50f
             paint.textAlign = Paint.Align.RIGHT
             canvas.drawText(if(state.isPaused) "▶" else "⏸", w - 30f, 60f, paint)
         }
 
-        // 2. 배속 버튼 (일시정지 버튼 왼쪽)
         val speedBtnSize = 80
-        val speedBtnX = pauseBtnX - speedBtnSize - 20 // 간격 20
+        val speedBtnX = pauseBtnX - speedBtnSize - 20
         val speedBtnY = 20
-
         val speedKey = "ui_speed_${state.gameSpeed}"
         val speedBitmap = ResourceManager.getUIBitmap(speedKey)
 
@@ -180,14 +181,12 @@ class DefenseGameRenderer(private val state: DefenseGameState) {
             val destRect = Rect(speedBtnX, speedBtnY, speedBtnX + speedBtnSize, speedBtnY + speedBtnSize)
             canvas.drawBitmap(speedBitmap, null, destRect, paint)
         } else {
-            // 이미지 없을 시 텍스트 폴백
+            paint.color = Color.CYAN
             paint.textSize = 50f
             paint.textAlign = Paint.Align.RIGHT
-            paint.color = Color.CYAN
             canvas.drawText("x${state.gameSpeed}", (w - 150).toFloat(), 60f, paint)
         }
 
-        // 하단 업그레이드 버튼 등은 유지
         if (!state.isLevelSelection && !state.isWeaponSelection && !state.isGameOver && !state.isStageClear) {
             paint.color = if (state.currentPoints >= state.upgradeCost) Color.parseColor("#76FF03") else Color.GRAY
             paint.style = Paint.Style.FILL
@@ -252,10 +251,10 @@ class DefenseGameRenderer(private val state: DefenseGameState) {
             drawOptionSelectionScreen(canvas, w, h)
 
         } else if (state.isGameOver) {
-            drawPopupBox(canvas, w, h, "GAME OVER", "Final Score: ${state.score}", "Tap to Return Home", null, Color.RED)
+            drawPopupBox(canvas, w, h, "GAME OVER", "Dong Acquired: +${state.acquiredDong}", "Tap to Return Home", null, Color.RED)
 
         } else if (state.isStageClear) {
-            drawPopupBox(canvas, w, h, "STAGE CLEAR!", "Score: ${state.score}", "Tap to Continue", "Tap to Exit Game", Color.GREEN)
+            drawPopupBox(canvas, w, h, "STAGE CLEAR!", "Dong Acquired: +${state.acquiredDong}", "Tap to Continue", "Tap to Exit Game", Color.GREEN)
 
         } else if (state.isPaused) {
             drawPausedScreen(canvas, w, h)
@@ -264,24 +263,20 @@ class DefenseGameRenderer(private val state: DefenseGameState) {
 
     private fun drawPausedScreen(canvas: Canvas, w: Int, h: Int) {
         drawOverlay(canvas, w, h)
-
         val boxW = 700f
         val boxH = 900f
         val centerX = w / 2f
         val centerY = h / 2f
-
         val rect = RectF(centerX - boxW/2, centerY - boxH/2, centerX + boxW/2, centerY + boxH/2)
 
         paint.color = Color.parseColor("#37474F")
         paint.style = Paint.Style.FILL
         canvas.drawRoundRect(rect, 30f, 30f, paint)
-
         paint.color = Color.WHITE
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = 5f
         canvas.drawRoundRect(rect, 30f, 30f, paint)
 
-        // 타이틀
         paint.style = Paint.Style.FILL
         paint.color = Color.WHITE
         paint.textSize = 60f
@@ -289,17 +284,14 @@ class DefenseGameRenderer(private val state: DefenseGameState) {
         paint.isFakeBoldText = true
         canvas.drawText("PAUSED", centerX, centerY - boxH/2 + 80, paint)
 
-        // 옵션 목록 타이틀
         paint.textSize = 30f
         paint.color = Color.CYAN
         canvas.drawText("- 획득한 옵션 (Collected Buffs) -", centerX, centerY - boxH/2 + 140, paint)
 
-        // 옵션 목록 그리기
         paint.textSize = 24f
         paint.color = Color.LTGRAY
         paint.textAlign = Paint.Align.LEFT
         paint.isFakeBoldText = false
-
         val startX = centerX - boxW/2 + 50f
         var startY = centerY - boxH/2 + 190f
 
@@ -316,27 +308,22 @@ class DefenseGameRenderer(private val state: DefenseGameState) {
                 if (startY > centerY + boxH/2 - 150) break
             }
         }
-
-        // 하단 버튼
         paint.textAlign = Paint.Align.CENTER
         paint.textSize = 40f
         paint.isFakeBoldText = true
         paint.color = Color.CYAN
         canvas.drawText("Tap to Resume", centerX, centerY + boxH/2 - 120, paint)
-
         paint.color = Color.parseColor("#FF5252")
         canvas.drawText("Tap to Exit Game", centerX, centerY + boxH/2 - 50, paint)
     }
 
     private fun drawOptionSelectionScreen(canvas: Canvas, w: Int, h: Int) {
         drawOverlay(canvas, w, h)
-
         paint.color = Color.CYAN
         paint.textSize = 60f
         paint.textAlign = Paint.Align.CENTER
         paint.isFakeBoldText = true
         canvas.drawText("WAVE COMPLETE!", w/2f, 200f, paint)
-
         paint.color = Color.WHITE
         paint.textSize = 35f
         paint.isFakeBoldText = false
@@ -347,33 +334,27 @@ class DefenseGameRenderer(private val state: DefenseGameState) {
         val cardH = 250f
         val startY = 450f
         val gap = 50f
-
         for (i in options.indices) {
             val option = options[i]
             val cardX = w/2f
             val cardY = startY + i * (cardH + gap)
-
             val rect = RectF(cardX - cardW/2, cardY - cardH/2, cardX + cardW/2, cardY + cardH/2)
 
             paint.color = Color.parseColor("#455A64")
             paint.style = Paint.Style.FILL
             canvas.drawRoundRect(rect, 20f, 20f, paint)
-
             paint.color = option.grade.color
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = 8f
             canvas.drawRoundRect(rect, 20f, 20f, paint)
-
             paint.style = Paint.Style.FILL
             paint.color = option.grade.color
             paint.textSize = 36f
             paint.isFakeBoldText = true
             canvas.drawText(option.title, cardX, cardY - 60, paint)
-
             paint.color = Color.WHITE
             paint.textSize = 22f
             paint.isFakeBoldText = false
-
             val descLines = option.description.split("\n")
             var lineY = cardY
             for(line in descLines) {

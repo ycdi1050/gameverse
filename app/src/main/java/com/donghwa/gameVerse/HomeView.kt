@@ -15,6 +15,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.RelativeLayout
 import android.widget.TextView
+import android.widget.Toast
 import com.donghwa.gameVerse.character.CharacterDataManager
 import com.donghwa.gameVerse.defensegame.DefenseCharacterPopup
 import com.donghwa.gameVerse.defensegame.DefenseCharacterType
@@ -46,12 +47,15 @@ class HomeView(
     private lateinit var tabContainer: LinearLayout
 
     // 탭 버튼들
+    private lateinit var btnTabGacha: LinearLayout // [신규] 뽑기
     private lateinit var btnTabHangar: LinearLayout
     private lateinit var btnTabOperation: LinearLayout
     private lateinit var btnTabMiniGames: LinearLayout
 
-    private enum class Tab { HANGAR, OPERATION, MINI_GAMES }
+    private enum class Tab { GACHA, HANGAR, OPERATION, MINI_GAMES }
     private var currentTab = Tab.OPERATION
+
+    private lateinit var topBarDongText: TextView // 동 표시 텍스트뷰
 
     init {
         ResourceManager.init(context)
@@ -109,6 +113,23 @@ class HomeView(
         nameParams.addRule(RelativeLayout.CENTER_VERTICAL)
         row1.addView(welcomeText, nameParams)
 
+        // [신규] 동 표시
+        topBarDongText = TextView(context).apply {
+            text = "💰 ${characterDataManager.userDong}"
+            textSize = 16f
+            setTextColor(Color.parseColor("#FFD700"))
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 80, 0)
+        }
+        val dongParams = RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.WRAP_CONTENT, RelativeLayout.LayoutParams.WRAP_CONTENT)
+        dongParams.addRule(RelativeLayout.LEFT_OF, View.generateViewId()) // 설정 버튼 왼쪽 (ID 임시)
+        dongParams.addRule(RelativeLayout.ALIGN_PARENT_RIGHT)
+        dongParams.rightMargin = 100 // 설정 버튼 공간
+        dongParams.addRule(RelativeLayout.CENTER_VERTICAL)
+        row1.addView(topBarDongText, dongParams)
+
+
         val settingsBtn = TextView(context).apply {
             text = "⚙️"
             textSize = 24f
@@ -149,29 +170,26 @@ class HomeView(
 
         container.addView(xpLayout)
 
-        // 3행: 점수 요약
-        val scoreText = TextView(context).apply {
-            text = "🏆 벽돌: $highScore | 러닝: $runnerHighScore | 디펜스: $defenseHighScore"
-            textSize = 12f
-            setTextColor(Color.parseColor("#B0BEC5"))
-            gravity = Gravity.CENTER
-        }
-        container.addView(scoreText)
-
         return container
+    }
+
+    private fun updateTopBarDong() {
+        topBarDongText.text = "💰 ${characterDataManager.userDong}"
     }
 
     private fun createBottomNavBar(): View {
         val navContainer = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(Color.parseColor("#151515"))
-            weightSum = 3f
+            weightSum = 4f // 탭 개수 4개로 증가
         }
 
+        btnTabGacha = createNavButton("뽑기", "🎁", Tab.GACHA) // [신규]
         btnTabHangar = createNavButton("격납고", "🛠️", Tab.HANGAR)
-        btnTabOperation = createNavButton("작전 시작", "🚀", Tab.OPERATION)
+        btnTabOperation = createNavButton("작전", "🚀", Tab.OPERATION)
         btnTabMiniGames = createNavButton("미니게임", "🕹️", Tab.MINI_GAMES)
 
+        navContainer.addView(btnTabGacha)
         navContainer.addView(btnTabHangar)
         navContainer.addView(btnTabOperation)
         navContainer.addView(btnTabMiniGames)
@@ -184,10 +202,6 @@ class HomeView(
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
-
-            // [수정] 오류 발생 라인 제거 (배경색은 updateTabUI에서 직접 관리)
-            // setBackgroundResource(android.R.drawable.selectable_item_background)
-
             setOnClickListener { switchTab(tab) }
         }
 
@@ -206,8 +220,6 @@ class HomeView(
             typeface = Typeface.DEFAULT_BOLD
         }
         btnLayout.addView(titleTv)
-
-        // 태그에 TextView 저장 (색상 변경용)
         btnLayout.tag = titleTv
 
         return btnLayout
@@ -217,18 +229,21 @@ class HomeView(
         currentTab = tab
         contentContainer.removeAllViews()
 
-        // 탭 UI 업데이트 (선택된 탭 강조)
+        updateTabUI(btnTabGacha, tab == Tab.GACHA)
         updateTabUI(btnTabHangar, tab == Tab.HANGAR)
         updateTabUI(btnTabOperation, tab == Tab.OPERATION)
         updateTabUI(btnTabMiniGames, tab == Tab.MINI_GAMES)
 
-        // 콘텐츠 로드
         val contentView = when (tab) {
+            Tab.GACHA -> createGachaView()
             Tab.HANGAR -> createHangarView()
             Tab.OPERATION -> createOperationView()
             Tab.MINI_GAMES -> createMiniGamesView()
         }
         contentContainer.addView(contentView)
+
+        // 탭 전환 시 동 정보 갱신
+        updateTopBarDong()
     }
 
     private fun updateTabUI(tabLayout: LinearLayout, isSelected: Boolean) {
@@ -244,8 +259,128 @@ class HomeView(
 
     // --- 각 탭의 콘텐츠 생성 ---
 
+    // [신규] 뽑기 탭 뷰
+    private fun createGachaView(): View {
+        val layout = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+            setBackgroundColor(Color.parseColor("#121212"))
+        }
+
+        val title = TextView(context).apply {
+            text = "보급품 뽑기 (Supply Drop)"
+            textSize = 28f
+            setTextColor(Color.CYAN)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, 50)
+        }
+        layout.addView(title)
+
+        // 뽑기 상자 이미지 (플레이스홀더)
+        val boxEmoji = TextView(context).apply {
+            text = "📦"
+            textSize = 100f
+            gravity = Gravity.CENTER
+        }
+        layout.addView(boxEmoji)
+
+        val desc = TextView(context).apply {
+            text = "희귀한 무기를 획득할 기회!\n1회 소모: 100 동"
+            textSize = 16f
+            setTextColor(Color.LTGRAY)
+            gravity = Gravity.CENTER
+            setPadding(0, 30, 0, 50)
+        }
+        layout.addView(desc)
+
+        val drawBtn = Button(context).apply {
+            text = "1회 뽑기 (100 동)"
+            setBackgroundColor(Color.parseColor("#FF9800"))
+            setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
+            layoutParams = LinearLayout.LayoutParams(500, 150)
+
+            setOnClickListener {
+                characterDataManager.drawGachaWeapon(uid, 100) { success, msg, type, grade ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    updateTopBarDong() // 상단 동 갱신
+
+                    if (success && type != null && grade != null) {
+                        // 결과 팝업 표시
+                        showGachaResult(type, grade)
+                    }
+                }
+            }
+        }
+        layout.addView(drawBtn)
+
+        val probInfo = TextView(context).apply {
+            text = "확률 정보:\nNormal(65%), Magic(25%), Rare(7%), Unique(2.5%), Legend(0.5%)"
+            textSize = 12f
+            setTextColor(Color.GRAY)
+            gravity = Gravity.CENTER
+            setPadding(0, 50, 0, 0)
+        }
+        layout.addView(probInfo)
+
+        return layout
+    }
+
+    private fun showGachaResult(type: WeaponType, grade: WeaponGrade) {
+        val dialogView = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(50, 50, 50, 50)
+            setBackgroundColor(Color.parseColor("#212121"))
+        }
+
+        val resultTitle = TextView(context).apply {
+            text = "획득 성공!"
+            textSize = 24f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+        }
+        dialogView.addView(resultTitle)
+
+        // 아이템 이미지 표시
+        val itemIcon = ImageView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(300, 300).apply { topMargin = 30; bottomMargin = 30 }
+            val bitmap = ResourceManager.getWeaponBitmap(type, grade)
+            if (bitmap != null) {
+                setImageBitmap(bitmap)
+            } else {
+                setBackgroundColor(grade.getColor()) // 이미지 없으면 색상만
+            }
+        }
+        dialogView.addView(itemIcon)
+
+        val itemName = TextView(context).apply {
+            text = "[${grade.name}] ${type.name}"
+            textSize = 20f
+            setTextColor(grade.getColor())
+            gravity = Gravity.CENTER
+            typeface = Typeface.DEFAULT_BOLD
+        }
+        dialogView.addView(itemName)
+
+        val closeBtn = Button(context).apply {
+            text = "확인"
+            layoutParams = LinearLayout.LayoutParams(300, 120).apply { topMargin = 50 }
+            setOnClickListener { (tag as? AlertDialog)?.dismiss() }
+        }
+        dialogView.addView(closeBtn)
+
+        val dialog = AlertDialog.Builder(context)
+            .setView(dialogView)
+            .create()
+
+        closeBtn.tag = dialog
+        dialog.show()
+    }
+
     private fun createHangarView(): View {
-        // 기존 팝업 로직을 재사용하여 View만 가져옴
         val popupLogic = DefenseCharacterPopup(
             context,
             uid,
@@ -283,7 +418,6 @@ class HomeView(
         }
         layout.addView(subText)
 
-        // 현재 장착 정보 표시
         val currentInfo = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -308,7 +442,6 @@ class HomeView(
         currentInfo.addView(infoText)
         layout.addView(currentInfo)
 
-        // 게임 시작 버튼
         val startBtn = Button(context).apply {
             text = "START OPERATION"
             textSize = 24f
@@ -331,7 +464,6 @@ class HomeView(
     }
 
     private fun createMiniGamesView(): View {
-        // 기존 팝업 로직을 재사용하여 View만 가져옴
         val popupLogic = MiniGamePopup(
             context,
             onStartBrickGame,
@@ -340,8 +472,6 @@ class HomeView(
         )
         return popupLogic.getContentView()
     }
-
-    // --- 유틸리티 메서드 ---
 
     private fun startDefenseGameImmediately() {
         val charType = characterDataManager.equippedDefenseCharacter
