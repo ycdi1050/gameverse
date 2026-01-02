@@ -29,6 +29,10 @@ class DefenseCharacterPopup(
 
     private var currentSelectedSlot: SlotType = SlotType.UNIT
 
+    // 탭 버튼 참조 변수
+    private lateinit var btnTabItem: TextView
+    private lateinit var btnTabCharacter: TextView
+
     enum class SlotType(val title: String) {
         UNIT("캐릭터"),
         WEAPON("무기"),
@@ -41,7 +45,7 @@ class DefenseCharacterPopup(
 
     private lateinit var inventoryGridContainer: LinearLayout
     private lateinit var statusText: TextView
-    private var dialog: AlertDialog? = null // Nullable로 변경 (View 모드 지원)
+    private var dialog: AlertDialog? = null
 
     private data class SlotViews(val container: View, val icon: ImageView, val label: TextView)
     private var slotViewsMap = mutableMapOf<SlotType, SlotViews>()
@@ -82,7 +86,6 @@ class DefenseCharacterPopup(
             )
         }
 
-        // 임베딩 모드가 아닐 때만 상단 타이틀 바 표시 (HomeView에서는 탭이 타이틀 역할)
         if (!isEmbedded) {
             val titleBar = TextView(context).apply {
                 text = " 격납고 (Hangar) "
@@ -96,18 +99,15 @@ class DefenseCharacterPopup(
             mainLayout.addView(titleBar)
         }
 
+        // 1. 상단 장비 장착 섹션
         val equipSection = createEquipSection()
         mainLayout.addView(equipSection)
 
-        val invHeader = TextView(context).apply {
-            text = "▼ 보유 아이템 목록 (Inventory)"
-            textSize = 14f
-            setTextColor(Color.LTGRAY)
-            setPadding(40, 20, 0, 20)
-            setBackgroundColor(Color.parseColor("#252525"))
-        }
-        mainLayout.addView(invHeader)
+        // 2. [신규] 탭 섹션 (아이템 / 캐릭터) - 화면 중간
+        val tabSection = createTabSection()
+        mainLayout.addView(tabSection)
 
+        // 3. 인벤토리 목록 (스크롤 영역)
         val scrollView = ScrollView(context).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
@@ -122,12 +122,80 @@ class DefenseCharacterPopup(
         scrollView.addView(inventoryGridContainer)
         mainLayout.addView(scrollView)
 
+        // 4. 하단 저장/출격 버튼 섹션
         val bottomLayout = createBottomSection(isEmbedded)
         mainLayout.addView(bottomLayout)
 
+        // 초기 상태 로드 (탭 UI 동기화 포함)
         refreshInventoryGrid()
+        updateTabUI()
 
         return mainLayout
+    }
+
+    // [신규] 탭 섹션 생성 함수
+    private fun createTabSection(): View {
+        val container = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            weightSum = 2f
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                setMargins(20, 0, 20, 10)
+            }
+            setBackgroundColor(Color.parseColor("#1E1E1E"))
+        }
+
+        btnTabItem = createTabButton("아이템 (Items)") {
+            // 아이템 탭 클릭 시 무기 슬롯 자동 선택
+            selectSlot(SlotType.WEAPON)
+        }
+
+        btnTabCharacter = createTabButton("캐릭터 (Characters)") {
+            // 캐릭터 탭 클릭 시 캐릭터 슬롯 자동 선택
+            selectSlot(SlotType.UNIT)
+        }
+
+        container.addView(btnTabItem)
+        container.addView(btnTabCharacter)
+
+        return container
+    }
+
+    private fun createTabButton(text: String, onClick: () -> Unit): TextView {
+        return TextView(context).apply {
+            this.text = text
+            textSize = 16f
+            gravity = Gravity.CENTER
+            setPadding(0, 30, 0, 30)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginEnd = 2
+                marginStart = 2
+            }
+            setOnClickListener { onClick() }
+        }
+    }
+
+    // [신규] 현재 선택된 슬롯에 따라 탭 스타일 업데이트
+    private fun updateTabUI() {
+        // UNIT(캐릭터) 슬롯이 선택되어 있으면 캐릭터 탭 활성화, 그 외에는 아이템 탭 활성화
+        val isCharacterTab = currentSelectedSlot == SlotType.UNIT
+
+        updateTabStyle(btnTabCharacter, isCharacterTab)
+        updateTabStyle(btnTabItem, !isCharacterTab)
+    }
+
+    private fun updateTabStyle(view: TextView, isActive: Boolean) {
+        if (isActive) {
+            view.setTextColor(Color.CYAN)
+            view.setBackgroundColor(Color.parseColor("#333333")) // 활성 배경 (밝은 회색)
+            view.typeface = Typeface.DEFAULT_BOLD
+        } else {
+            view.setTextColor(Color.GRAY)
+            view.setBackgroundColor(Color.parseColor("#121212")) // 비활성 배경 (어두운 색)
+            view.typeface = Typeface.DEFAULT
+        }
     }
 
     private fun createEquipSection(): View {
@@ -201,7 +269,7 @@ class DefenseCharacterPopup(
             setOnClickListener {
                 saveData()
                 Toast.makeText(context, "장비 설정이 저장되었습니다.", Toast.LENGTH_SHORT).show()
-                dialog?.dismiss() // 팝업일 때만 닫기
+                dialog?.dismiss()
             }
         }
 
@@ -281,6 +349,8 @@ class DefenseCharacterPopup(
         val currSlot = slotViewsMap[currentSelectedSlot]
         currSlot?.container?.setBackgroundColor(Color.parseColor("#555555"))
 
+        // 슬롯 변경 시 탭 UI도 동기화
+        updateTabUI()
         refreshInventoryGrid()
     }
 
@@ -332,6 +402,7 @@ class DefenseCharacterPopup(
         when (currentSelectedSlot) {
             SlotType.UNIT -> loadUnitGrid(itemSize)
             SlotType.WEAPON -> loadWeaponGrid(itemSize)
+            // 아이템 탭 선택 시에도 WEAPON이 기본이므로 WEAPON 그리드가 로드됨
             else -> loadEmptyGrid("이 슬롯에 장착할 수 있는 아이템이 없습니다.\n(업데이트 예정)")
         }
     }
