@@ -73,6 +73,7 @@ class HomeView(
         quickStartBtn.setTextColor(Color.BLACK)
         quickStartBtn.layoutParams = btnParams
         quickStartBtn.setOnClickListener {
+            // [수정] 중복 로딩 제거하고 즉시 시작
             startDefenseGameImmediately()
         }
         centerLayout.addView(quickStartBtn)
@@ -85,16 +86,8 @@ class HomeView(
         hangarBtn.setTextColor(Color.WHITE)
         hangarBtn.layoutParams = btnParams
         hangarBtn.setOnClickListener {
-            // [수정] 미리 로드된 데이터가 있으므로 바로 팝업 표시 가능
-            // DefenseCharacterPopup에 데이터 매니저를 전달할 수 있도록 구조 변경 필요할 수도 있음
-            // 현재 구조상 DefenseCharacterPopup 내부에서 새로 인스턴스를 생성하므로
-            // 데이터를 공유하기 위해 여기서는 간단히 팝업 호출만 함
-            // (참고: DefenseCharacterPopup 내부에서도 loadDefenseInventory를 호출하지만
-            // 이미 캐시된 데이터가 있거나 빠르게 로드됨)
-
-            // 최적화: DefenseCharacterPopup 생성자에 dataManager를 전달하는 것이 좋음
-            // 하지만 기존 코드를 유지하기 위해 기본 방식으로 호출하되,
-            // MainActivity에서 이미 로드했으므로 Firestore 캐시 덕분에 빠를 것임
+            // 팝업 표시 (DefenseCharacterPopup 내부에서 데이터를 확인하므로 약간의 로딩이 있을 수 있으나,
+            // MainActivity에서 이미 로드했으므로 Firestore 캐시 덕분에 훨씬 빠를 것입니다)
             DefenseCharacterPopup(context, uid) { charType, weaponType, grade ->
                 onStartDefenseGame(charType, weaponType, grade)
             }.show()
@@ -117,13 +110,17 @@ class HomeView(
         setupTopInfo(context)
     }
 
-    // [수정] 이미 로드된 데이터를 사용하여 즉시 시작
+    // [수정] 이미 로드된 데이터를 사용하여 즉시 시작 (DB 재요청 없음)
     private fun startDefenseGameImmediately() {
-        // 이미 MainActivity에서 데이터를 로드했으므로 바로 변수 접근 가능
+        // MainActivity에서 이미 loadDefenseInventory를 완료했으므로
+        // characterDataManager의 변수에는 최신 데이터가 들어있습니다.
+        // 따라서 별도 로딩 없이 바로 게임을 시작합니다.
+
         val charType = characterDataManager.equippedDefenseCharacter
         val weaponType = characterDataManager.equippedDefenseWeapon
         val weaponGrade = characterDataManager.equippedDefenseWeaponGrade
 
+        // 바로 게임 시작 콜백 호출
         onStartDefenseGame(charType, weaponType, weaponGrade)
     }
 
