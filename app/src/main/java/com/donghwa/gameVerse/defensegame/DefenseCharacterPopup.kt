@@ -33,6 +33,9 @@ class DefenseCharacterPopup(
     private lateinit var btnTabItem: TextView
     private lateinit var btnTabCharacter: TextView
 
+    // [신규] 임베디드 모드 확인용 플래그
+    private var isEmbeddedMode = false
+
     enum class SlotType(val title: String) {
         UNIT("캐릭터"),
         WEAPON("무기"),
@@ -53,12 +56,14 @@ class DefenseCharacterPopup(
     // [신규] 팝업 없이 View만 리턴하는 메서드 (HomeView 탭 임베딩용)
     fun getContentView(): View {
         ResourceManager.init(context)
+        isEmbeddedMode = true // 임베디드 모드 활성화
         return createMainLayout(isEmbedded = true)
     }
 
     // 기존 팝업 표시 메서드
     fun show() {
         ResourceManager.init(context)
+        isEmbeddedMode = false // 임베디드 모드 비활성화
         val view = createMainLayout(isEmbedded = false)
 
         dialog = AlertDialog.Builder(context)
@@ -202,29 +207,37 @@ class DefenseCharacterPopup(
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(20, 40, 20, 40)
+            // [수정] 패딩을 줄여서 더 넓게 보이도록 조정
+            setPadding(10, 40, 10, 40)
             setBackgroundColor(Color.parseColor("#1E1E1E"))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            // [수정] 화면 전체 너비를 10으로 나누어 사용 (비율 할당)
+            weightSum = 10f
         }
 
+        // 왼쪽 컬럼 (작은 슬롯들) - 30%
         val leftCol = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 3f)
         }
         leftCol.addView(createSlotButton(SlotType.HELMET))
         leftCol.addView(createSlotButton(SlotType.WEAPON))
         leftCol.addView(createSlotButton(SlotType.RING))
 
+        // 중앙 컬럼 (캐릭터 슬롯) - 40%
         val centerCol = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(30, 0, 30, 0)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 4f)
         }
         centerCol.addView(createSlotButton(SlotType.UNIT, isLarge = true))
 
+        // 오른쪽 컬럼 (작은 슬롯들) - 30%
         val rightCol = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 3f)
         }
         rightCol.addView(createSlotButton(SlotType.NECKLACE))
         rightCol.addView(createSlotButton(SlotType.ARMOR))
@@ -254,50 +267,55 @@ class DefenseCharacterPopup(
         updateStatusText()
         container.addView(statusText)
 
-        val btnRow = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            weightSum = 2f
-        }
+        // [수정] 임베디드(탭) 모드가 아닐 때만 버튼 표시
+        if (!isEmbedded) {
+            val btnRow = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                weightSum = 2f
+            }
 
-        val saveBtn = Button(context).apply {
-            text = "저장 (Save)"
-            setBackgroundColor(Color.DKGRAY)
-            setTextColor(Color.WHITE)
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginEnd = 10
-            }
-            setOnClickListener {
-                saveData()
-                Toast.makeText(context, "장비 설정이 저장되었습니다.", Toast.LENGTH_SHORT).show()
-                dialog?.dismiss()
-            }
-        }
-
-        val startBtn = Button(context).apply {
-            text = "출격 (Deploy)"
-            setBackgroundColor(Color.parseColor("#76FF03"))
-            setTextColor(Color.BLACK)
-            typeface = Typeface.DEFAULT_BOLD
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginStart = 10
-            }
-            setOnClickListener {
-                saveData()
-                dialog?.dismiss()
-                if (equippedCharacter != null && equippedWeapon != null) {
-                    onStart(equippedCharacter!!, equippedWeapon!!, equippedWeaponGrade)
+            val saveBtn = Button(context).apply {
+                text = "저장 (Save)"
+                setBackgroundColor(Color.DKGRAY)
+                setTextColor(Color.WHITE)
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    marginEnd = 10
+                }
+                setOnClickListener {
+                    saveData()
+                    Toast.makeText(context, "장비 설정이 저장되었습니다.", Toast.LENGTH_SHORT).show()
+                    dialog?.dismiss()
                 }
             }
+
+            val startBtn = Button(context).apply {
+                text = "출격 (Deploy)"
+                setBackgroundColor(Color.parseColor("#76FF03"))
+                setTextColor(Color.BLACK)
+                typeface = Typeface.DEFAULT_BOLD
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    marginStart = 10
+                }
+                setOnClickListener {
+                    saveData()
+                    dialog?.dismiss()
+                    if (equippedCharacter != null && equippedWeapon != null) {
+                        onStart(equippedCharacter!!, equippedWeapon!!, equippedWeaponGrade)
+                    }
+                }
+            }
+
+            btnRow.addView(saveBtn)
+            btnRow.addView(startBtn)
+            container.addView(btnRow)
         }
 
-        btnRow.addView(saveBtn)
-        btnRow.addView(startBtn)
-        container.addView(btnRow)
         return container
     }
 
     private fun createSlotButton(type: SlotType, isLarge: Boolean = false): View {
-        val size = if (isLarge) 240 else 160
+        // [수정] 버튼 크기를 약간 키워 화면에 더 꽉 차 보이게 조정 (Large: 240->280, Small: 160->180)
+        val size = if (isLarge) 280 else 180
 
         val frame = FrameLayout(context).apply {
             layoutParams = LinearLayout.LayoutParams(size, size).apply {
@@ -328,7 +346,7 @@ class DefenseCharacterPopup(
             }
             text = type.title
             setTextColor(Color.LTGRAY)
-            textSize = if(isLarge) 14f else 10f
+            textSize = if(isLarge) 14f else 11f
             gravity = Gravity.CENTER
             setShadowLayer(3f, 0f, 0f, Color.BLACK)
         }
@@ -443,6 +461,8 @@ class DefenseCharacterPopup(
                     updateSlotButtonUI(SlotType.UNIT)
                     updateStatusText()
                     refreshInventoryGrid()
+                    // [수정] 임베디드 모드면 선택 즉시 저장
+                    if (isEmbeddedMode) saveData()
                 } else {
                     Toast.makeText(context, "미보유 캐릭터입니다.", Toast.LENGTH_SHORT).show()
                 }
@@ -504,6 +524,8 @@ class DefenseCharacterPopup(
                 updateSlotButtonUI(SlotType.WEAPON)
                 updateStatusText()
                 refreshInventoryGrid()
+                // [수정] 임베디드 모드면 선택 즉시 저장
+                if (isEmbeddedMode) saveData()
             }
 
             itemView.setOnLongClickListener {
