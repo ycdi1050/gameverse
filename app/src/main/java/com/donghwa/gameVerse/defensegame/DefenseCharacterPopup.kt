@@ -20,13 +20,9 @@ import com.donghwa.gameVerse.character.CharacterDataManager
 class DefenseCharacterPopup(
     private val context: Context,
     private val uid: String,
-    // [최적화] 외부에서 이미 데이터가 로드된 Manager를 주입받음
     private val dataManager: CharacterDataManager,
     private val onStart: (DefenseCharacterType, WeaponType, WeaponGrade) -> Unit
 ) {
-    // [제거] 내부에서 새로 생성하면 DB를 다시 불러오므로 제거
-    // private val dataManager = CharacterDataManager()
-
     private var equippedCharacter: DefenseCharacterType? = null
     private var equippedWeapon: WeaponType? = null
     private var equippedWeaponGrade: WeaponGrade = WeaponGrade.NORMAL
@@ -45,21 +41,34 @@ class DefenseCharacterPopup(
 
     private lateinit var inventoryGridContainer: LinearLayout
     private lateinit var statusText: TextView
-    private lateinit var dialog: AlertDialog
+    private var dialog: AlertDialog? = null // Nullable로 변경 (View 모드 지원)
 
     private data class SlotViews(val container: View, val icon: ImageView, val label: TextView)
     private var slotViewsMap = mutableMapOf<SlotType, SlotViews>()
 
-    fun show() {
-        // [최적화] 리소스가 이미 로드되어 있으면 즉시 리턴 (ResourceManager 내부 로직)
+    // [신규] 팝업 없이 View만 리턴하는 메서드 (HomeView 탭 임베딩용)
+    fun getContentView(): View {
         ResourceManager.init(context)
-
-        // [최적화] DB 로딩 대기 메시지 제거 및 즉시 UI 표시
-        // 이미 MainActivity에서 데이터를 로드했으므로 dataManager에는 데이터가 존재함
-        showInventoryDialog()
+        return createMainLayout(isEmbedded = true)
     }
 
-    private fun showInventoryDialog() {
+    // 기존 팝업 표시 메서드
+    fun show() {
+        ResourceManager.init(context)
+        val view = createMainLayout(isEmbedded = false)
+
+        dialog = AlertDialog.Builder(context)
+            .setView(view)
+            .create()
+
+        dialog?.show()
+        dialog?.window?.setLayout(
+            (context.resources.displayMetrics.widthPixels * 0.95).toInt(),
+            (context.resources.displayMetrics.heightPixels * 0.9).toInt()
+        )
+    }
+
+    private fun createMainLayout(isEmbedded: Boolean): View {
         equippedCharacter = dataManager.equippedDefenseCharacter
         equippedWeapon = dataManager.equippedDefenseWeapon
         equippedWeaponGrade = dataManager.equippedDefenseWeaponGrade
@@ -67,18 +76,25 @@ class DefenseCharacterPopup(
         val mainLayout = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#121212"))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.MATCH_PARENT
+            )
         }
 
-        val titleBar = TextView(context).apply {
-            text = " 격납고 (Hangar) "
-            textSize = 22f
-            setTextColor(Color.CYAN)
-            setBackgroundColor(Color.parseColor("#1E1E1E"))
-            gravity = Gravity.CENTER
-            setPadding(0, 30, 0, 30)
-            typeface = Typeface.DEFAULT_BOLD
+        // 임베딩 모드가 아닐 때만 상단 타이틀 바 표시 (HomeView에서는 탭이 타이틀 역할)
+        if (!isEmbedded) {
+            val titleBar = TextView(context).apply {
+                text = " 격납고 (Hangar) "
+                textSize = 22f
+                setTextColor(Color.CYAN)
+                setBackgroundColor(Color.parseColor("#1E1E1E"))
+                gravity = Gravity.CENTER
+                setPadding(0, 30, 0, 30)
+                typeface = Typeface.DEFAULT_BOLD
+            }
+            mainLayout.addView(titleBar)
         }
-        mainLayout.addView(titleBar)
 
         val equipSection = createEquipSection()
         mainLayout.addView(equipSection)
@@ -106,20 +122,12 @@ class DefenseCharacterPopup(
         scrollView.addView(inventoryGridContainer)
         mainLayout.addView(scrollView)
 
-        val bottomLayout = createBottomSection()
+        val bottomLayout = createBottomSection(isEmbedded)
         mainLayout.addView(bottomLayout)
 
         refreshInventoryGrid()
 
-        dialog = AlertDialog.Builder(context)
-            .setView(mainLayout)
-            .create()
-
-        dialog.show()
-        dialog.window?.setLayout(
-            (context.resources.displayMetrics.widthPixels * 0.95).toInt(),
-            (context.resources.displayMetrics.heightPixels * 0.9).toInt()
-        )
+        return mainLayout
     }
 
     private fun createEquipSection(): View {
@@ -161,7 +169,7 @@ class DefenseCharacterPopup(
         return container
     }
 
-    private fun createBottomSection(): View {
+    private fun createBottomSection(isEmbedded: Boolean): View {
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#1E1E1E"))
@@ -193,7 +201,7 @@ class DefenseCharacterPopup(
             setOnClickListener {
                 saveData()
                 Toast.makeText(context, "장비 설정이 저장되었습니다.", Toast.LENGTH_SHORT).show()
-                dialog.dismiss()
+                dialog?.dismiss() // 팝업일 때만 닫기
             }
         }
 
@@ -207,7 +215,7 @@ class DefenseCharacterPopup(
             }
             setOnClickListener {
                 saveData()
-                dialog.dismiss()
+                dialog?.dismiss()
                 if (equippedCharacter != null && equippedWeapon != null) {
                     onStart(equippedCharacter!!, equippedWeapon!!, equippedWeaponGrade)
                 }
